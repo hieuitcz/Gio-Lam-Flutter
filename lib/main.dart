@@ -112,6 +112,40 @@ class _HomePageState extends State<HomePage> {
         ? widget.store.data.employees.first.name
         : null;
     _tick();
+    // Báo cho chủ biết nếu file dữ liệu đã bị sửa bên ngoài.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final status = _s.tamperStatus;
+      if (status == 'recovered') {
+        _showTamperDialog(
+            'Phát hiện file dữ liệu đã bị sửa bên ngoài.',
+            'App đã tự khôi phục từ bản sao lưu gần nhất còn nguyên vẹn. '
+            'File bị sửa được giữ lại bên cạnh file dữ liệu để anh kiểm tra.');
+      } else if (status == 'lost') {
+        _showTamperDialog(
+            'Phát hiện file dữ liệu đã bị sửa bên ngoài.',
+            'Không còn bản sao lưu tốt nên dữ liệu đã về trắng. Anh khôi phục '
+            'từ file sao lưu đã xuất trong Cài đặt > Sao lưu dữ liệu > '
+            'Khôi phục từ file.');
+      }
+    });
+  }
+
+  Future<void> _showTamperDialog(String title, String message) async {
+    if (!mounted) return;
+    await showCupertinoDialog(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Đã hiểu'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _tick() {

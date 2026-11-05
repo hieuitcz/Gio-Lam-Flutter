@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 
@@ -227,27 +228,137 @@ class DataStore {
   final File file;
   late AppData data;
 
+  /// null = dữ liệu bình thường; 'recovered' = file bị sửa ngoài, đã khôi
+  /// phục từ bản sao lưu; 'lost' = file bị sửa ngoài và không còn bản sao
+  /// lưu tốt (dữ liệu về trắng, chủ khôi phục từ file sao lưu đã xuất).
+  String? tamperStatus;
+  String? _keyHex; // khóa ký HMAC, cache trong bộ nhớ
+
   DataStore(this.file);
 
-  Future<void> load() async {
-    if (await file.exists()) {
-      try {
-        data = AppData.fromJson(jsonDecode(await file.readAsString()) as Map<String, dynamic>);
-        return;
-      } catch (_) {
-        // File hỏng: giữ lại bản hỏng rồi tạo mới, không mất hẳn không báo.
-        try {
-          await file.copy('${file.path}.hong');
-        } catch (_) {}
+  File get _keyFile => File('${file.path}.key');
+  File get _bakFile => File('${file.path}.bak');
+
+  /// Khóa ký ngẫu nhiên 32 byte, lưu riêng 1 file. Tạo 1 lần rồi dùng mãi.
+  Future<List<int>> _signKey() async {
+    if (_keyHex != null) return _hexToBytes(_keyHex!);
+    try {
+      if (await _keyFile.exists()) {
+        _keyHex = (await _keyFile.readAsString()).trim();
+        if (_keyHex!.length == 64) return _hexToBytes(_keyHex!);
       }
+    } catch (_) {}
+    final rnd = Random.secure();
+    final bytes = List<int>.generate(32, (_) => rnd.nextInt(256));
+    _keyHex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    try {
+      await _keyFile.parent.create(recursive: true);
+      await _keyFile.writeAsString(_keyHex!);
+    } catch (_) {}
+    return bytes;
+  }
+
+  static List<int> _hexToBytes(String hex) {
+    final out = <int>[];
+    for (var i = 0; i + 1 < hex.length; i += 2) {
+      out.add(int.parse(hex.substring(i, i + 2), radix: 16));
     }
-    data = AppData.seed();
-    await save();
+    return out;
+  }
+
+  String _hmacHex(List<int> key, String payload) =>
+      Hmac(sha256, key).convert(utf8.encode(payload)).toString();
+
+  /// File hiện tại trên đĩa có còn nguyên vẹn không (đã ký đúng / file cũ).
+  Future<bool> _onDiskFileOk(List<int> key) async {
+    try {
+      if (!await file.exists()) return true;
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is Map && decoded.containsKey('sig')) {
+        return _hmacHex(key, jsonEncode(decoded['data'])) == decoded['sig'];
+      }
+      return true; // file cũ chưa ký thì coi là nguyên vẹn
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> load() async {
+    tamperStatus = null;
+    if (!await file.exists()) {
+      data = AppData.seed();
+      await save();
+      return;
+    }
+    try {
+      final raw = await file.readAsString();
+      final decoded = jsonDecode(raw);
+      if (decoded is Map && decoded.containsKey('sig') && decoded.containsKey('data')) {
+        final key = await _signKey();
+        if (_hmacHex(key, jsonEncode(decoded['data'])) == decoded['sig']) {
+          data = AppData.fromJson(decoded['data'] as Map<String, dynamic>);
+          return;
+        }
+        // Chữ ký không khớp: file đã bị sửa bên ngoài.
+        tamperStatus = 'tampered';
+        try {
+          final now = DateTime.now();
+          final stamp =
+              '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
+          await file.copy('${file.path}.tampered-$stamp');
+        } catch (_) {}
+        if (await _bakFile.exists()) {
+          try {
+            final braw = await _bakFile.readAsString();
+            final bdec = jsonDecode(braw);
+            if (bdec is Map && bdec.containsKey('sig')) {
+              if (_hmacHex(key, jsonEncode(bdec['data'])) == bdec['sig']) {
+                data = AppData.fromJson(bdec['data'] as Map<String, dynamic>);
+                tamperStatus = 'recovered';
+                await save();
+                return;
+              }
+            } else {
+              // Bản sao lưu cũ chưa ký: dùng tạm rồi ký lại.
+              data = AppData.fromJson(bdec as Map<String, dynamic>);
+              tamperStatus = 'recovered';
+              await save();
+              return;
+            }
+          } catch (_) {}
+        }
+        data = AppData.seed();
+        tamperStatus = 'lost';
+        await save();
+        return;
+      }
+      // File cũ chưa ký (trước khi có tính năng này): đọc bình thường,
+      // lần lưu sau sẽ tự ký.
+      data = AppData.fromJson(decoded as Map<String, dynamic>);
+    } catch (_) {
+      // File hỏng: giữ lại bản hỏng rồi tạo mới, không mất hẳn không báo.
+      try {
+        await file.copy('${file.path}.hong');
+      } catch (_) {}
+      data = AppData.seed();
+      await save();
+    }
   }
 
   Future<void> save() async {
     await file.parent.create(recursive: true);
-    await file.writeAsString(jsonEncode(data.toJson()));
+    final key = await _signKey();
+    final payload = jsonEncode(data.toJson());
+    final sig = _hmacHex(key, payload);
+    // Sao lưu bản tốt hiện tại trước khi ghi đè (chỉ khi file trên đĩa
+    // còn nguyên vẹn — không ghi đè bản sao lưu bằng file đã bị sửa).
+    if (await _onDiskFileOk(key)) {
+      try {
+        if (await file.exists()) await file.copy(_bakFile.path);
+      } catch (_) {}
+    }
+    final content = jsonEncode({'v': 1, 'data': data.toJson(), 'sig': sig});
+    await file.writeAsString(content);
   }
 
   // -- mật khẩu chủ ---------------------------------------------------

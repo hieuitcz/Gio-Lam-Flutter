@@ -114,4 +114,57 @@ void main() {
     store.ownerAddShift('Hieu', '2026-11-05', '13:00', '17:00');
     expect(store.data.shiftsOn('Hieu', '2026-11-05').length, 2);
   });
+
+  test('file du lieu duoc ky: sua ngoai thi phat hien va khoi phuc tu sao luu', () async {
+    final f = File('/tmp/test-gio-lam-sign.json');
+    for (final suffix in ['', '.key', '.bak']) {
+      final x = File('/tmp/test-gio-lam-sign.json$suffix');
+      if (await x.exists()) await x.delete();
+    }
+    final store = DataStore(f);
+    store.data = AppData.seed();
+    await store.save();
+    store.data.employees.first.rate = 200;
+    await store.save(); // lan 2: tao .bak tu ban tot truoc do
+    // Gia vo sua file ben ngoai: doi gia gio trong file
+    var raw = await f.readAsString();
+    raw = raw.replaceFirst('"rate":200', '"rate":999');
+    await f.writeAsString(raw);
+    final store2 = DataStore(f);
+    await store2.load();
+    expect(store2.tamperStatus, 'recovered');
+    expect(store2.data.employees.first.rate, 160); // ve ban sao luu tot
+  });
+
+  test('file bi sua ma khong co sao luu tot thi ve trang', () async {
+    final f = File('/tmp/test-gio-lam-sign2.json');
+    for (final suffix in ['', '.key', '.bak']) {
+      final x = File('/tmp/test-gio-lam-sign2.json$suffix');
+      if (await x.exists()) await x.delete();
+    }
+    final store = DataStore(f);
+    store.data = AppData.seed();
+    await store.save(); // chi luu 1 lan: chua co .bak
+    var raw = await f.readAsString();
+    raw = raw.replaceFirst('"rate":160', '"rate":999');
+    await f.writeAsString(raw);
+    final store2 = DataStore(f);
+    await store2.load();
+    expect(store2.tamperStatus, 'lost');
+    expect(store2.data.employees.first.rate, 160); // du lieu goc (seed)
+  });
+
+  test('file cu chua ky van doc duoc binh thuong', () async {
+    final f = File('/tmp/test-gio-lam-sign3.json');
+    for (final suffix in ['', '.key', '.bak']) {
+      final x = File('/tmp/test-gio-lam-sign3.json$suffix');
+      if (await x.exists()) await x.delete();
+    }
+    final data = AppData.seed();
+    await f.writeAsString(jsonEncode(data.toJson()));
+    final store = DataStore(f);
+    await store.load();
+    expect(store.tamperStatus, isNull);
+    expect(store.data.employees.first.name, 'Hieu');
+  });
 }

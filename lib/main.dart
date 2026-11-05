@@ -45,8 +45,22 @@ void main() async {
     await windowManager.show();
     await windowManager.focus();
   });
-  final dir = await getApplicationDocumentsDirectory();
-  final store = DataStore(File('${dir.path}/gio-lam.json'));
+  // Dữ liệu lưu trong thư mục riêng của app (Windows: AppData),
+  // không để lộ trong Documents cho nhân viên mò ra sửa.
+  // File cũ ở Documents (nếu có) được chuyển qua đây 1 lần duy nhất.
+  final supportDir = await getApplicationSupportDirectory();
+  final dataFile = File('${supportDir.path}/gio-lam.json');
+  if (!await dataFile.exists()) {
+    final oldFile =
+        File('${(await getApplicationDocumentsDirectory()).path}/gio-lam.json');
+    if (await oldFile.exists()) {
+      try {
+        await oldFile.copy(dataFile.path);
+        await oldFile.rename('${oldFile.path}.cu');
+      } catch (_) {}
+    }
+  }
+  final store = DataStore(dataFile);
   await store.load();
   runApp(GioLamApp(store: store));
 }

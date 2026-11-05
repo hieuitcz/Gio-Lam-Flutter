@@ -75,9 +75,26 @@ class _OwnerIntent extends Intent {
   const _OwnerIntent();
 }
 
-class GioLamApp extends StatelessWidget {
+class GioLamApp extends StatefulWidget {
   final DataStore store;
   const GioLamApp({super.key, required this.store});
+
+  @override
+  State<GioLamApp> createState() => _GioLamAppState();
+}
+
+class _GioLamAppState extends State<GioLamApp> {
+  late String _fontFamily;
+
+  @override
+  void initState() {
+    super.initState();
+    _fontFamily = widget.store.data.fontFamily;
+  }
+
+  /// 'Lexend' -> dùng font Lexend; 'System' -> null = font mặc định của hệ thống.
+  String? get _effectiveFontFamily =>
+      _fontFamily == 'Lexend' ? 'Lexend' : null;
 
   @override
   Widget build(BuildContext context) {
@@ -88,11 +105,19 @@ class GioLamApp extends StatelessWidget {
         colorSchemeSeed: _accent,
         useMaterial3: true,
         scaffoldBackgroundColor: _bg,
-        fontFamily: 'Segoe UI',
+        fontFamily: _effectiveFontFamily,
       ),
       home: CupertinoTheme(
-        data: const CupertinoThemeData(primaryColor: iosIndigo),
-        child: HomePage(store: store),
+        data: CupertinoThemeData(
+          primaryColor: iosIndigo,
+          textTheme: CupertinoTextThemeData(
+            textStyle: TextStyle(fontFamily: _effectiveFontFamily),
+          ),
+        ),
+        child: HomePage(
+          store: widget.store,
+          onFontChanged: (f) => setState(() => _fontFamily = f),
+        ),
       ),
     );
   }
@@ -100,7 +125,8 @@ class GioLamApp extends StatelessWidget {
 
 class HomePage extends StatefulWidget {
   final DataStore store;
-  const HomePage({super.key, required this.store});
+  final ValueChanged<String>? onFontChanged;
+  const HomePage({super.key, required this.store, this.onFontChanged});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -186,7 +212,7 @@ class _HomePageState extends State<HomePage> {
                       style: const TextStyle(color: _muted, fontSize: 13)),
                 ]),
           ),
-          const Icon(CupertinoIcons.chevron_right, size: 14, color: _muted),
+          const Icon(Icons.chevron_right, size: 14, color: _muted),
         ]),
       ),
     );
@@ -195,19 +221,19 @@ class _HomePageState extends State<HomePage> {
   List<Widget> _aboutContactRows() {
     return [
       _contactRow(
-          icon: CupertinoIcons.globe,
+          icon: Icons.public,
           tint: iosBlue,
           label: 'Facebook',
           value: 'facebook.com/lehieuit',
           url: 'https://www.facebook.com/lehieuit'),
       _contactRow(
-          icon: CupertinoIcons.phone_fill,
+          icon: Icons.phone,
           tint: _teal,
           label: 'Điện thoại',
           value: '+420 773 155 611',
           url: 'tel:+420773155611'),
       _contactRow(
-          icon: CupertinoIcons.envelope_fill,
+          icon: Icons.email,
           tint: _accent,
           label: 'Email',
           value: 'lehieuit91@gmail.com',
@@ -498,7 +524,7 @@ class _HomePageState extends State<HomePage> {
         ? canEmployeeEditShift(shift.date, shift.clockIn, shift.clockOut)
         : day == _todayStr;
     if (!editable && !_ownerMode) {
-      _snack('Ngày đã qua chỉ chủ cửa hàng mới sửa được. Nhấn Ctrl+H rồi nhập mật khẩu chủ.');
+      _snack('Ngày đã qua bạn không có quyền sửa hãy liên hệ admin để được trợ giúp');
       return;
     }
     final inCtrl = TextEditingController(
@@ -700,7 +726,7 @@ class _HomePageState extends State<HomePage> {
                                   ? null
                                   : () => setState(() => breakMinutes -= 5),
                               child: const Icon(
-                                  CupertinoIcons.minus_circle_fill,
+                                  Icons.remove_circle,
                                   color: _accent,
                                   size: 24),
                             ),
@@ -719,7 +745,7 @@ class _HomePageState extends State<HomePage> {
                                   ? null
                                   : () => setState(() => breakMinutes += 5),
                               child: const Icon(
-                                  CupertinoIcons.plus_circle_fill,
+                                  Icons.add_circle,
                                   color: _accent,
                                   size: 24),
                             ),
@@ -1030,12 +1056,12 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final items = <BottomNavigationBarItem>[
       const BottomNavigationBarItem(
-          icon: Icon(CupertinoIcons.clock_fill), label: 'Chấm công'),
+          icon: Icon(Icons.access_time_filled), label: 'Chấm công'),
       const BottomNavigationBarItem(
-          icon: Icon(CupertinoIcons.doc_text_fill), label: 'Báo cáo'),
+          icon: Icon(Icons.description), label: 'Báo cáo'),
       if (_ownerMode)
         const BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.gear_alt_fill), label: 'Cài đặt'),
+            icon: Icon(Icons.settings), label: 'Cài đặt'),
     ];
     final pages = <Widget>[
       _attendanceTab(),
@@ -1101,7 +1127,7 @@ class _HomePageState extends State<HomePage> {
           padding: const EdgeInsets.fromLTRB(24, 44, 24, 0),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              const IconTile(icon: CupertinoIcons.bag_fill, tint: _teal),
+              const IconTile(icon: Icons.work, tint: _teal),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -1117,7 +1143,7 @@ class _HomePageState extends State<HomePage> {
                 padding: EdgeInsets.zero,
                 minimumSize: Size.zero,
                 onPressed: _showAboutDialog,
-                child: const Icon(CupertinoIcons.info_circle,
+                child: const Icon(Icons.info_outline,
                     color: _muted, size: 22),
               ),
             ]),
@@ -1268,7 +1294,7 @@ class _HomePageState extends State<HomePage> {
             Row(children: [
               Expanded(
                 child: PrimaryButton(
-                  icon: CupertinoIcons.play_circle_fill,
+                  icon: Icons.play_circle_fill,
                   label: 'Vào ca',
                   onPressed: open != null || emp == null
                       ? null
@@ -1280,7 +1306,7 @@ class _HomePageState extends State<HomePage> {
               Expanded(
                 child: TintedButton(
                   tint: _danger,
-                  icon: CupertinoIcons.stop_circle_fill,
+                  icon: Icons.stop_circle,
                   label: 'Tan ca',
                   onPressed: open == null
                       ? null
@@ -1301,7 +1327,7 @@ class _HomePageState extends State<HomePage> {
               Expanded(
                 child: TintedButton(
                   tint: _accent,
-                  icon: CupertinoIcons.square_pencil,
+                  icon: Icons.edit_note,
                   label: 'Nhập tay giờ vào',
                   onPressed: emp == null
                       ? null
@@ -1318,7 +1344,7 @@ class _HomePageState extends State<HomePage> {
               Expanded(
                 child: TintedButton(
                   tint: _accent,
-                  icon: CupertinoIcons.square_pencil,
+                  icon: Icons.edit_note,
                   label: 'Nhập tay giờ ra',
                   onPressed: emp == null
                       ? null
@@ -1339,7 +1365,7 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 20),
             const AppSectionHeader(
-                icon: CupertinoIcons.calendar, title: 'Bảng công tháng'),
+                icon: Icons.calendar_month, title: 'Bảng công tháng'),
             const SizedBox(height: 8),
             MonthSwitcher(
               monthLabel: 'Tháng ${_month.month}/${_month.year}',
@@ -1350,19 +1376,19 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 16),
             const AppSectionHeader(
-                icon: CupertinoIcons.chart_bar_fill, title: 'Tổng quan'),
+                icon: Icons.bar_chart, title: 'Tổng quan'),
             const SizedBox(height: 8),
             GradientSummaryCard(metrics: [
               MetricData(
-                  icon: CupertinoIcons.calendar,
+                  icon: Icons.calendar_month,
                   value: '${monthTotal.days}',
                   title: 'Ngày làm'),
               MetricData(
-                  icon: CupertinoIcons.clock_fill,
+                  icon: Icons.access_time_filled,
                   value: fmtDuration(monthTotal.minutes),
                   title: 'Tổng giờ'),
               MetricData(
-                  icon: CupertinoIcons.bolt_fill,
+                  icon: Icons.bolt,
                   value: fmtDuration(monthOvertime),
                   title: 'Tăng ca'),
             ]),
@@ -1436,19 +1462,19 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(height: 20),
           const AppSectionHeader(
-              icon: CupertinoIcons.chart_bar_fill, title: 'Tổng hợp'),
+              icon: Icons.bar_chart, title: 'Tổng hợp'),
           const SizedBox(height: 8),
           GradientSummaryCard(metrics: [
             MetricData(
-                icon: CupertinoIcons.calendar,
+                icon: Icons.calendar_month,
                 value: '${total.days}',
                 title: 'Ngày làm'),
             MetricData(
-                icon: CupertinoIcons.clock_fill,
+                icon: Icons.access_time_filled,
                 value: fmtDuration(total.minutes),
                 title: 'Tổng giờ'),
             MetricData(
-                icon: CupertinoIcons.bolt_fill,
+                icon: Icons.bolt,
                 value: fmtDuration(overtime),
                 title: 'Tăng ca'),
           ]),
@@ -1458,13 +1484,13 @@ class _HomePageState extends State<HomePage> {
           ],
           const SizedBox(height: 20),
           const AppSectionHeader(
-              icon: CupertinoIcons.doc_text_fill, title: 'Xuất báo cáo'),
+              icon: Icons.description, title: 'Xuất báo cáo'),
           const SizedBox(height: 8),
           _card(
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Row(children: [
                 IconTile(
-                    icon: CupertinoIcons.doc_text_fill, tint: _accent),
+                    icon: Icons.description, tint: _accent),
                 SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -1485,7 +1511,7 @@ class _HomePageState extends State<HomePage> {
               SizedBox(
                 width: double.infinity,
                 child: PrimaryButton(
-                  icon: CupertinoIcons.doc_fill,
+                  icon: Icons.description,
                   label: 'Tạo báo cáo PDF',
                   onPressed: emp == null ? null : _exportPdf,
                 ),
@@ -1505,7 +1531,7 @@ class _HomePageState extends State<HomePage> {
           Row(children: [
             const Expanded(
                 child: AppSectionHeader(
-                    icon: CupertinoIcons.list_bullet,
+                    icon: Icons.list,
                     title: 'Dữ liệu trong báo cáo')),
             CupertinoButton(
               padding: EdgeInsets.zero,
@@ -1514,7 +1540,7 @@ class _HomePageState extends State<HomePage> {
                   ? null
                   : () => _showEntryEditor(),
               child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(CupertinoIcons.plus_circle_fill, size: 16),
+                Icon(Icons.add_circle, size: 16),
                 SizedBox(width: 4),
                 Text('Thêm ngày', style: TextStyle(fontSize: 14)),
               ]),
@@ -1597,24 +1623,60 @@ class _HomePageState extends State<HomePage> {
           const Text('Chỉ chủ cửa hàng mới xem và sửa được mục này.',
               style: TextStyle(color: _muted, fontSize: 14)),
           const SizedBox(height: 20),
-          const AppSectionHeader(icon: CupertinoIcons.bag_fill, title: 'Thông tin cửa hàng'),
+          const AppSectionHeader(icon: Icons.work, title: 'Thông tin cửa hàng'),
           const SizedBox(height: 8),
           AppCard(
             padding: EdgeInsets.zero,
             child: ListTile(
               leading: const IconTile(
-                  icon: CupertinoIcons.bag_fill, tint: _teal),
+                  icon: Icons.work, tint: _teal),
               title: const Text('Tên cửa hàng'),
               subtitle: Text(data.storeName,
                   style: const TextStyle(
                       color: _ink, fontWeight: FontWeight.w600)),
-              trailing: const Icon(CupertinoIcons.chevron_right,
+              trailing: const Icon(Icons.chevron_right,
                   size: 16, color: _muted),
               onTap: _editStoreName,
             ),
           ),
           const SizedBox(height: 20),
-          const AppSectionHeader(icon: CupertinoIcons.person_2_fill, title: 'Nhân viên'),
+          const AppSectionHeader(icon: Icons.palette, title: 'Giao diện'),
+          const SizedBox(height: 8),
+          _card(
+            Column(children: [
+              Row(children: [
+                const IconTile(icon: Icons.text_fields, tint: _accent),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text('Font chữ',
+                      style: TextStyle(fontSize: 15, color: _ink)),
+                ),
+                CupertinoSegmentedControl<String>(
+                  groupValue: data.fontFamily,
+                  onValueChanged: (v) async {
+                    setState(() => data.fontFamily = v);
+                    await _save();
+                    widget.onFontChanged?.call(v);
+                  },
+                  children: const {
+                    'Lexend': Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('Lexend')),
+                    'System': Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('Mặc định')),
+                  },
+                ),
+              ]),
+              const SizedBox(height: 8),
+              const Text(
+                'Lexend là font mới, rõ và hiện đại; "Mặc định" dùng font hệ thống của máy.',
+                style: TextStyle(color: _muted, fontSize: 12),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 20),
+          const AppSectionHeader(icon: Icons.group, title: 'Nhân viên'),
           const SizedBox(height: 8),
           AppCard(
             padding: EdgeInsets.zero,
@@ -1627,7 +1689,7 @@ class _HomePageState extends State<HomePage> {
                 const Divider(height: 1, color: _line),
                 ListTile(
                   leading: const IconTile(
-                      icon: CupertinoIcons.plus_circle_fill,
+                      icon: Icons.add_circle,
                       tint: _accent),
                   title: const Text('Thêm nhân viên',
                       style: TextStyle(color: _accentDark)),
@@ -1637,13 +1699,13 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(height: 20),
-          const AppSectionHeader(icon: CupertinoIcons.clock_fill, title: 'Giờ làm'),
+          const AppSectionHeader(icon: Icons.access_time_filled, title: 'Giờ làm'),
           const SizedBox(height: 8),
           _card(
             Column(children: [
               Row(children: [
                 const IconTile(
-                    icon: CupertinoIcons.clock_fill, tint: _accent),
+                    icon: Icons.access_time_filled, tint: _accent),
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text('Giờ chuẩn',
@@ -1659,7 +1721,7 @@ class _HomePageState extends State<HomePage> {
                               data.standardMinutesPerDay -= 30);
                           await _save();
                         },
-                  child: const Icon(CupertinoIcons.minus_circle_fill,
+                  child: const Icon(Icons.remove_circle,
                       color: _accent),
                 ),
                 Text(
@@ -1678,7 +1740,7 @@ class _HomePageState extends State<HomePage> {
                               data.standardMinutesPerDay += 30);
                           await _save();
                         },
-                  child: const Icon(CupertinoIcons.plus_circle_fill,
+                  child: const Icon(Icons.add_circle,
                       color: _accent),
                 ),
               ]),
@@ -1690,13 +1752,13 @@ class _HomePageState extends State<HomePage> {
             ]),
           ),
           const SizedBox(height: 20),
-          const AppSectionHeader(icon: CupertinoIcons.money_dollar_circle_fill, title: 'Lương'),
+          const AppSectionHeader(icon: Icons.paid, title: 'Lương'),
           const SizedBox(height: 8),
           _card(
             Column(children: [
               Row(children: [
                 const IconTile(
-                    icon: CupertinoIcons.money_dollar_circle_fill,
+                    icon: Icons.paid,
                     tint: _teal),
                 const SizedBox(width: 12),
                 const Expanded(
@@ -1727,38 +1789,38 @@ class _HomePageState extends State<HomePage> {
             ]),
           ),
           const SizedBox(height: 20),
-          const AppSectionHeader(icon: CupertinoIcons.archivebox_fill, title: 'Sao lưu dữ liệu'),
+          const AppSectionHeader(icon: Icons.archive, title: 'Sao lưu dữ liệu'),
           const SizedBox(height: 8),
           AppCard(
             padding: EdgeInsets.zero,
             child: Column(children: [
               ListTile(
                 leading: const IconTile(
-                    icon: CupertinoIcons.square_arrow_up_on_square_fill,
+                    icon: Icons.upload,
                     tint: iosBlue),
                 title: const Text('Xuất sao lưu (.json)'),
                 subtitle: const Text(
                     'Lưu toàn bộ dữ liệu + cài đặt ra file JSON'),
-                trailing: const Icon(CupertinoIcons.chevron_right,
+                trailing: const Icon(Icons.chevron_right,
                     size: 16, color: _muted),
                 onTap: _exportBackup,
               ),
               const Divider(height: 1, color: _line),
               ListTile(
                 leading: const IconTile(
-                    icon: CupertinoIcons.square_arrow_down_on_square_fill,
+                    icon: Icons.download,
                     tint: iosBlue),
                 title: const Text('Khôi phục từ file'),
                 subtitle: const Text(
                     'Thay thế dữ liệu hiện tại bằng file sao lưu'),
-                trailing: const Icon(CupertinoIcons.chevron_right,
+                trailing: const Icon(Icons.chevron_right,
                     size: 16, color: _muted),
                 onTap: _importBackup,
               ),
             ]),
           ),
           const SizedBox(height: 20),
-          const AppSectionHeader(icon: CupertinoIcons.info_circle_fill, title: 'Giới thiệu'),
+          const AppSectionHeader(icon: Icons.info, title: 'Giới thiệu'),
           const SizedBox(height: 8),
           _card(
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1778,27 +1840,27 @@ class _HomePageState extends State<HomePage> {
             ]),
           ),
           const SizedBox(height: 20),
-          const AppSectionHeader(icon: CupertinoIcons.question_circle_fill, title: 'Hỗ trợ'),
+          const AppSectionHeader(icon: Icons.help, title: 'Hỗ trợ'),
           const SizedBox(height: 8),
           AppCard(
             padding: EdgeInsets.zero,
             child: Column(children: [
               ListTile(
                 leading: const IconTile(
-                    icon: CupertinoIcons.book_fill, tint: iosBlue),
+                    icon: Icons.menu_book, tint: iosBlue),
                 title: const Text('Hướng dẫn sử dụng'),
-                trailing: const Icon(CupertinoIcons.chevron_right,
+                trailing: const Icon(Icons.chevron_right,
                     size: 16, color: _muted),
                 onTap: _showGuideDialog,
               ),
               const Divider(height: 1, color: _line),
               ListTile(
                 leading: const IconTile(
-                    icon: CupertinoIcons.arrow_down_circle_fill,
+                    icon: Icons.system_update,
                     tint: iosBlue),
                 title: const Text('Kiểm tra bản cập nhật'),
                 subtitle: const Text('Nhắn qua Facebook Hiếu Lê'),
-                trailing: const Icon(CupertinoIcons.chevron_right,
+                trailing: const Icon(Icons.chevron_right,
                     size: 16, color: _muted),
                 onTap: () => launchUrl(Uri.parse(_supportUrl),
                     mode: LaunchMode.externalApplication),
@@ -1806,11 +1868,11 @@ class _HomePageState extends State<HomePage> {
               const Divider(height: 1, color: _line),
               ListTile(
                 leading: const IconTile(
-                    icon: CupertinoIcons.chat_bubble_text_fill,
+                    icon: Icons.chat_bubble,
                     tint: iosBlue),
                 title: const Text('Báo lỗi / Góp ý'),
                 subtitle: const Text('Nhắn qua Facebook Hiếu Lê'),
-                trailing: const Icon(CupertinoIcons.chevron_right,
+                trailing: const Icon(Icons.chevron_right,
                     size: 16, color: _muted),
                 onTap: () => launchUrl(Uri.parse(_supportUrl),
                     mode: LaunchMode.externalApplication),
@@ -1818,23 +1880,23 @@ class _HomePageState extends State<HomePage> {
             ]),
           ),
           const SizedBox(height: 20),
-          const AppSectionHeader(icon: CupertinoIcons.lock_fill, title: 'Chủ cửa hàng'),
+          const AppSectionHeader(icon: Icons.lock, title: 'Chủ cửa hàng'),
           const SizedBox(height: 8),
           AppCard(
             padding: EdgeInsets.zero,
             child: Column(children: [
               ListTile(
                 leading: const IconTile(
-                    icon: CupertinoIcons.lock_fill, tint: _accent),
+                    icon: Icons.lock, tint: _accent),
                 title: const Text('Đổi mật khẩu chủ'),
-                trailing: const Icon(CupertinoIcons.chevron_right,
+                trailing: const Icon(Icons.chevron_right,
                     size: 16, color: _muted),
                 onTap: _changeOwnerPassword,
               ),
               const Divider(height: 1, color: _line),
               ListTile(
                 leading: const IconTile(
-                    icon: CupertinoIcons.lock_open_fill, tint: _danger),
+                    icon: Icons.lock_open, tint: _danger),
                 title: const Text('Thoát chế độ chủ cửa hàng',
                     style: TextStyle(color: _danger)),
                 onTap: _ownerLogin,
@@ -1854,7 +1916,7 @@ class _HomePageState extends State<HomePage> {
     return AppCard(
       child: Row(children: [
         const IconTile(
-            icon: CupertinoIcons.money_dollar_circle_fill, tint: _teal),
+            icon: Icons.paid, tint: _teal),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -1897,11 +1959,11 @@ class _HomePageState extends State<HomePage> {
           style: const TextStyle(color: _muted, fontSize: 13)),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         IconButton(
-          icon: const Icon(CupertinoIcons.pencil, size: 18),
+          icon: const Icon(Icons.edit, size: 18),
           onPressed: () => _editEmployee(e),
         ),
         IconButton(
-          icon: const Icon(CupertinoIcons.trash,
+          icon: const Icon(Icons.delete,
               size: 18, color: _danger),
           onPressed: () => _removeEmployee(e),
         ),
@@ -2002,7 +2064,7 @@ class _HomePageState extends State<HomePage> {
             if (edited) ...[
               const SizedBox(height: 4),
               const Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(CupertinoIcons.pencil, size: 10, color: _amber),
+                Icon(Icons.edit, size: 10, color: _amber),
                 SizedBox(width: 3),
                 Text('Đã sửa',
                     style: TextStyle(fontSize: 11, color: _amber)),

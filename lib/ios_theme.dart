@@ -311,7 +311,7 @@ class MonthSwitcher extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       child: Row(
         children: [
-          _chevron(CupertinoIcons.chevron_left, onPrev),
+          _chevron(Icons.chevron_left, onPrev),
           Expanded(
             child: Column(
               children: [
@@ -330,7 +330,7 @@ class MonthSwitcher extends StatelessWidget {
               ],
             ),
           ),
-          _chevron(CupertinoIcons.chevron_right, onNext),
+          _chevron(Icons.chevron_right, onNext),
         ],
       ),
     );

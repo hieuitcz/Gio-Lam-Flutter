@@ -98,7 +98,9 @@ class AppData {
   int standardMinutesPerDay;
   // Loại tiền lương: 'Kč' hoặc 'đ' (giống app iOS).
   String currency;
-  AppData({required this.storeName, required this.employees, Map<String, List<Shift>>? shifts, this.ownerHash, this.standardMinutesPerDay = 480, this.currency = 'Kč'})
+  // Font chữ giao diện: 'Lexend' (mặc định) hoặc 'System' (font hệ thống).
+  String fontFamily;
+  AppData({required this.storeName, required this.employees, Map<String, List<Shift>>? shifts, this.ownerHash, this.standardMinutesPerDay = 480, this.currency = 'Kč', this.fontFamily = 'Lexend'})
       : shifts = shifts ?? {};
 
   factory AppData.seed() => AppData(
@@ -113,6 +115,7 @@ class AppData {
         'ownerHash': ownerHash,
         'standardMinutesPerDay': standardMinutesPerDay,
         'currency': currency,
+        'fontFamily': fontFamily,
       };
 
   factory AppData.fromJson(Map<String, dynamic> j) => AppData(
@@ -126,6 +129,7 @@ class AppData {
         ownerHash: j['ownerHash'] as String?,
         standardMinutesPerDay: (j['standardMinutesPerDay'] as num?)?.toInt() ?? 480,
         currency: j['currency'] as String? ?? 'Kč',
+        fontFamily: j['fontFamily'] as String? ?? 'Lexend',
       );
 
   /// Tất cả đoạn ca của 1 ngày (đã sắp theo giờ vào).

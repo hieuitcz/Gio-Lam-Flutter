@@ -167,4 +167,16 @@ void main() {
     expect(store.tamperStatus, isNull);
     expect(store.data.employees.first.name, 'Hieu');
   });
+
+
+  test('thong tin nguoi code luu/khoi phuc dung', () {
+    final data = AppData.seed();
+    expect(data.developerName, 'Hiếu');
+    data.developerName = 'Lê Hiếu';
+    data.developerContact = 'Zalo 0123456789';
+    final restored = AppData.fromJson(
+        jsonDecode(jsonEncode(data.toJson())) as Map<String, dynamic>);
+    expect(restored.developerName, 'Lê Hiếu');
+    expect(restored.developerContact, 'Zalo 0123456789');
+  });
 }

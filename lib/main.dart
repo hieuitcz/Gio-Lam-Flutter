@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'logic.dart';
@@ -27,6 +28,9 @@ const _bg = Color(0xFFF1F5F9);
 const _accent = Color(0xFF0D9488);
 const _accentDark = Color(0xFF0F766E);
 const _danger = Color(0xFFDC2626);
+const _appVersion = '1.0.0';
+const _releasesUrl = 'https://github.com/hieuitcz/Gio-Lam-Flutter/releases';
+const _issuesUrl = 'https://github.com/hieuitcz/Gio-Lam-Flutter/issues/new';
 const _amber = Color(0xFFB45309);
 const _amberBg = Color(0xFFFEF3C7);
 
@@ -128,6 +132,83 @@ class _HomePageState extends State<HomePage> {
             'Khôi phục từ file.');
       }
     });
+  }
+
+  // --- Giới thiệu + Hỗ trợ: ai cũng xem được (nut ⓘ ở đầu tab Chấm công) ---
+  Future<void> _showAboutDialog() async {
+    final data = _s.data;
+    await showCupertinoDialog(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Gio-Lam — Chấm công'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            const Text('Phiên bản $_appVersion'),
+            const SizedBox(height: 4),
+            Text('Phát triển bởi ${data.developerName}'),
+            const SizedBox(height: 4),
+            Text('Liên hệ: ${data.developerContact}'),
+          ],
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _showGuideDialog();
+            },
+            child: const Text('Hướng dẫn sử dụng'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () => launchUrl(Uri.parse(_releasesUrl),
+                mode: LaunchMode.externalApplication),
+            child: const Text('Kiểm tra bản mới'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () => launchUrl(Uri.parse(_issuesUrl),
+                mode: LaunchMode.externalApplication),
+            child: const Text('Báo lỗi / Góp ý'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showGuideDialog() async {
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hướng dẫn sử dụng'),
+        content: const SingleChildScrollView(
+          child: Text(
+            'Chấm công\n'
+            '• Đến làm: chọn tên mình rồi bấm Vào ca.\n'
+            '• Về: bấm Tan ca. Quên bấm thì nhập tay giờ ra trong ngày.\n'
+            '• Chạy đi cửa hàng khác rồi quay lại: tan ca rồi bấm Vào ca lại, 1 ngày chấm được nhiều lần.\n'
+            '• Ca đêm (vd 20:00–05:00) được tính vào ngày bắt đầu ca.\n\n'
+            'Báo cáo\n'
+            '• Xem tổng giờ, tăng ca, tiền công theo tháng; bấm vào 1 ngày để sửa.\n'
+            '• Nút Xuất PDF để lưu bảng chấm công tháng.\n\n'
+            'Chủ cửa hàng\n'
+            '• Nhấn Ctrl+H rồi nhập mật khẩu để mở tab Cài đặt (thêm nhân viên, giờ chuẩn, sao lưu dữ liệu).\n'
+            '• Dữ liệu được ký chống sửa; file sao lưu xuất ra trong Cài đặt.',
+            style: TextStyle(fontSize: 14, height: 1.5),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showTamperDialog(String title, String message) async {
@@ -309,6 +390,29 @@ class _HomePageState extends State<HomePage> {
     _s.setOwnerPassword(pw);
     await _save();
     _snack('Đã đổi mật khẩu chủ.');
+  }
+
+  Future<String?> _askText(String title, String initial) async {
+    final ctrl = TextEditingController(text: initial);
+    return showCupertinoDialog<String>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: CupertinoTextField(controller: ctrl),
+        ),
+        actions: [
+          CupertinoDialogAction(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Hủy')),
+          CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.pop(ctx, ctrl.text),
+              child: const Text('Lưu')),
+        ],
+      ),
+    );
   }
 
   // --- Sửa/thêm từng ngày (EntryEditor kiểu iOS) ---
@@ -785,6 +889,13 @@ class _HomePageState extends State<HomePage> {
                     letterSpacing: 1.5),
               ),
               const Spacer(),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                onPressed: _showAboutDialog,
+                child: const Icon(CupertinoIcons.info_circle,
+                    color: Colors.white70, size: 20),
+              ),
             ]),
             const SizedBox(height: 18),
             Text(
@@ -1457,6 +1568,100 @@ class _HomePageState extends State<HomePage> {
                 trailing: const Icon(CupertinoIcons.chevron_right,
                     size: 16, color: _muted),
                 onTap: _importBackup,
+              ),
+            ]),
+          ),
+          const SizedBox(height: 20),
+          _sectionTitle('Giới thiệu'),
+          const SizedBox(height: 8),
+          _card(
+            Column(children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(CupertinoIcons.person_fill,
+                    size: 20, color: _muted),
+                title: const Text('Phát triển bởi'),
+                subtitle: Text(data.developerName),
+                trailing: const Icon(CupertinoIcons.pencil,
+                    size: 16, color: _muted),
+                onTap: () async {
+                  final v = await _askText(
+                      'Tên người phát triển', data.developerName);
+                  if (v != null && v.trim().isNotEmpty) {
+                    setState(() => data.developerName = v.trim());
+                    await _save();
+                  }
+                },
+              ),
+              const Divider(height: 1, color: _line),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(CupertinoIcons.at,
+                    size: 20, color: _muted),
+                title: const Text('Liên hệ'),
+                subtitle: Text(data.developerContact),
+                trailing: const Icon(CupertinoIcons.pencil,
+                    size: 16, color: _muted),
+                onTap: () async {
+                  final v = await _askText(
+                      'Liên hệ (số điện thoại / Zalo / link)',
+                      data.developerContact);
+                  if (v != null && v.trim().isNotEmpty) {
+                    setState(() => data.developerContact = v.trim());
+                    await _save();
+                  }
+                },
+              ),
+              const Divider(height: 1, color: _line),
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(CupertinoIcons.info_circle,
+                    size: 20, color: _muted),
+                title: Text('Phiên bản'),
+                subtitle: Text('Gio-Lam $_appVersion'),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 20),
+          _sectionTitle('Hỗ trợ'),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _line),
+            ),
+            child: Column(children: [
+              ListTile(
+                leading: const Icon(CupertinoIcons.book_fill,
+                    color: _muted),
+                title: const Text('Hướng dẫn sử dụng'),
+                trailing: const Icon(CupertinoIcons.chevron_right,
+                    size: 16, color: _muted),
+                onTap: _showGuideDialog,
+              ),
+              const Divider(height: 1, color: _line),
+              ListTile(
+                leading: const Icon(
+                    CupertinoIcons.arrow_down_circle_fill,
+                    color: _muted),
+                title: const Text('Kiểm tra bản mới'),
+                subtitle: const Text('Mở trang tải bản mới nhất'),
+                trailing: const Icon(CupertinoIcons.chevron_right,
+                    size: 16, color: _muted),
+                onTap: () => launchUrl(Uri.parse(_releasesUrl),
+                    mode: LaunchMode.externalApplication),
+              ),
+              const Divider(height: 1, color: _line),
+              ListTile(
+                leading: const Icon(
+                    CupertinoIcons.chat_bubble_text_fill,
+                    color: _muted),
+                title: const Text('Báo lỗi / Góp ý'),
+                trailing: const Icon(CupertinoIcons.chevron_right,
+                    size: 16, color: _muted),
+                onTap: () => launchUrl(Uri.parse(_issuesUrl),
+                    mode: LaunchMode.externalApplication),
               ),
             ]),
           ),

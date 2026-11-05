@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'logic.dart';
+import 'report_pdf.dart';
 import 'store.dart';
 
 // Bảng màu kiểu app chấm công iOS: nền sáng, thẻ trắng bo tròn, 1 màu chủ đạo.
@@ -195,6 +197,29 @@ class _HomePageState extends State<HomePage> {
     await _act(() async {
       _s.ownerSetShift(_employee!, shift.date, ci.isEmpty ? null : ci, co.isEmpty ? null : co);
     }, 'Đã cập nhật ca.');
+  }
+
+  Future<void> _exportPdf() async {
+    final emp = widget.store.data.employees
+        .where((e) => e.name == _employee)
+        .firstOrNull;
+    if (emp == null) return;
+    try {
+      final bytes = await buildMonthPdf(
+        data: _s.data,
+        employee: emp,
+        year: _month.year,
+        month: _month.month,
+      );
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File(
+          '${dir.path}/Gio-Lam-${_month.year}-${_month.month.toString().padLeft(2, '0')}-${emp.name}.pdf');
+      await file.writeAsBytes(bytes);
+      _snack('Đã xuất PDF: ${file.path}');
+      await OpenFilex.open(file.path);
+    } catch (e) {
+      _snack('Xuất PDF lỗi: $e');
+    }
   }
 
   Future<void> _addEmployee() async {
@@ -557,6 +582,18 @@ class _HomePageState extends State<HomePage> {
                   icon: const Icon(Icons.chevron_right_rounded),
                   onPressed: () =>
                       setState(() => _month = DateTime(_month.year, _month.month + 1)),
+                ),
+                const Spacer(),
+                FilledButton.icon(
+                  onPressed: emp == null ? null : _exportPdf,
+                  icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
+                  label: const Text('Xuất PDF'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _ink,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
                 ),
               ]),
               const SizedBox(height: 8),

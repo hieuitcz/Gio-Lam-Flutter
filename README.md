@@ -14,6 +14,10 @@ cmd vì máy không có Python/tkinter).
   chủ cửa hàng (bấm "Chủ cửa hàng", nhập mật khẩu đặt ở lần đầu) mới sửa.
 - **Tổng tháng + tiền công**: theo từng nhân viên, giá giờ riêng
   (mặc định cửa hàng Rybna: Hieu 160/giờ, Hoan 170/giờ).
+- **Xuất PDF tháng**: nút "Xuất PDF" xuất báo cáo tháng của nhân viên đang
+  chọn theo mẫu của app iOS ChamCongHieuIT — tiêu đề "BẢNG CHẤM CÔNG",
+  bảng Ngày/Thứ/Vào/Ra/Giờ công/Tăng ca (tăng ca tính theo ngày, vượt 8h),
+  tổng kết + tiền công. File lưu vào thư mục Documents rồi tự mở lên.
 - Dữ liệu lưu trong file `gio-lam.json` ở thư mục Documents của máy.
 
 ## Chạy / build trên máy Windows

@@ -1,0 +1,140 @@
+import 'dart:typed_data';
+
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+
+import 'logic.dart';
+import 'store.dart';
+
+// Xuất báo cáo PDF tháng — mẫu theo app iOS ChamCongHieuIT
+// (Services/PDFReportGenerator.swift): khổ A4, tiêu đề "BẢNG CHẤM CÔNG",
+// thông tin nhân viên/cửa hàng, bảng ca làm, phần tổng kết + tiền công.
+// Tăng ca tính theo tổng giờ của cả ngày, vượt quá 8h/ngày.
+// Tiếng Việt dùng font Roboto kèm trong app (assets/fonts).
+const int standardMinutesPerDay = 480; // 8h/ngày
+
+/// Tăng ca của 1 ngày = số phút vượt quá 8h.
+int dayOvertimeMinutes(int dayTotalMinutes) =>
+    dayTotalMinutes > standardMinutesPerDay
+        ? dayTotalMinutes - standardMinutesPerDay
+        : 0;
+
+String _dateStr(DateTime d) =>
+    '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+String _weekday(DateTime d) =>
+    ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d.weekday % 7];
+
+Future<Uint8List> buildMonthPdf({
+  required AppData data,
+  required Employee employee,
+  required int year,
+  required int month,
+}) async {
+  final regular = pw.Font.ttf(
+      await rootBundle.load('assets/fonts/Roboto-Regular.ttf'));
+  final bold = pw.Font.ttf(
+      await rootBundle.load('assets/fonts/Roboto-Bold.ttf'));
+  final theme = pw.ThemeData.withFont(base: regular, bold: bold);
+
+  final shifts = data.monthShifts(employee.name, year, month);
+  final total = data.monthTotal(employee.name, year, month);
+  var overtimeTotal = 0;
+  for (final s in shifts) {
+    overtimeTotal += dayOvertimeMinutes(s.total ?? 0);
+  }
+  final pay = total.minutes / 60 * employee.rate;
+
+  final doc = pw.Document(theme: theme);
+  doc.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(40),
+      build: (context) => [
+        pw.Center(
+          child: pw.Text('BẢNG CHẤM CÔNG',
+              style: pw.TextStyle(font: bold, fontSize: 20)),
+        ),
+        pw.SizedBox(height: 6),
+        pw.Center(
+          child: pw.Text('Tháng $month/$year',
+              style: const pw.TextStyle(fontSize: 12)),
+        ),
+        pw.SizedBox(height: 18),
+        pw.Text('Họ và tên: ${employee.name}',
+            style: const pw.TextStyle(fontSize: 11)),
+        pw.SizedBox(height: 4),
+        pw.Text('Cửa hàng: ${data.storeName}',
+            style: const pw.TextStyle(fontSize: 11)),
+        pw.SizedBox(height: 4),
+        pw.Text(
+            'Đơn giá: ${employee.rate}/giờ',
+            style: const pw.TextStyle(fontSize: 11)),
+        pw.SizedBox(height: 16),
+        pw.TableHelper.fromTextArray(
+          headers: const [
+            'Ngày',
+            'Thứ',
+            'Vào',
+            'Ra',
+            'Giờ công',
+            'Tăng ca',
+            'Ghi chú',
+          ],
+          data: shifts.map((s) {
+            final d = DateTime.parse(s.date);
+            final notes = <String>[];
+            if (s.inManual) notes.add('vào: nhập tay');
+            if (s.outManual) notes.add('ra: nhập tay');
+            if (s.clockOut == null) notes.add('chưa tan ca');
+            return [
+              _dateStr(d),
+              _weekday(d),
+              s.clockIn == null ? '—' : fmtHhmm(s.clockIn!),
+              s.clockOut == null ? '—' : fmtHhmm(s.clockOut!),
+              fmtDuration(s.total),
+              dayOvertimeMinutes(s.total ?? 0) == 0
+                  ? '—'
+                  : fmtDuration(dayOvertimeMinutes(s.total ?? 0)),
+              notes.join(', '),
+            ];
+          }).toList(),
+          headerStyle: pw.TextStyle(font: bold, fontSize: 9),
+          cellStyle: const pw.TextStyle(fontSize: 9),
+          headerDecoration:
+              const pw.BoxDecoration(color: PdfColors.grey200),
+          cellAlignment: pw.Alignment.center,
+          headerAlignment: pw.Alignment.center,
+          columnWidths: {
+            0: const pw.FixedColumnWidth(70),
+            1: const pw.FixedColumnWidth(34),
+            2: const pw.FixedColumnWidth(44),
+            3: const pw.FixedColumnWidth(44),
+            4: const pw.FixedColumnWidth(60),
+            5: const pw.FixedColumnWidth(56),
+            6: const pw.FlexColumnWidth(),
+          },
+        ),
+        pw.SizedBox(height: 18),
+        pw.Text('Tổng kết tháng $month/$year',
+            style: pw.TextStyle(font: bold, fontSize: 12)),
+        pw.SizedBox(height: 6),
+        pw.Text('Số ngày làm: ${total.days} ngày',
+            style: const pw.TextStyle(fontSize: 11)),
+        pw.SizedBox(height: 4),
+        pw.Text('Tổng giờ: ${fmtDuration(total.minutes)}',
+            style: const pw.TextStyle(fontSize: 11)),
+        pw.SizedBox(height: 4),
+        pw.Text(
+            'Tăng ca (trên 8h/ngày): ${fmtDuration(overtimeTotal)}',
+            style: const pw.TextStyle(fontSize: 11)),
+        pw.SizedBox(height: 4),
+        pw.Text(
+            'Tiền công: ${pay.toStringAsFixed(0)} (giá ${employee.rate}/giờ)',
+            style: pw.TextStyle(font: bold, fontSize: 11)),
+      ],
+    ),
+  );
+  return doc.save();
+}

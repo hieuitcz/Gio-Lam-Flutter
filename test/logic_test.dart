@@ -22,6 +22,14 @@ void main() {
     expect(parseEmployee('110'), ('110', 110));
   });
 
+  test('gio chuan luu/khoi phuc dung', () {
+    final data = AppData.seed();
+    data.standardMinutesPerDay = 720;
+    final restored = AppData.fromJson(data.toJson());
+    expect(restored.standardMinutesPerDay, 720);
+    expect(AppData.fromJson({}).standardMinutesPerDay, 480);
+  });
+
   test('nhap tay ngay cu bi chan, ca dem dong dung', () {
     final store = DataStore(File('/tmp/test-gio-lam.json'));
     store.data = AppData.seed();

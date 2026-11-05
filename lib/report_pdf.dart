@@ -10,12 +10,12 @@ import 'store.dart';
 // Xuất báo cáo PDF tháng — mẫu theo app iOS ChamCongHieuIT
 // (Services/PDFReportGenerator.swift): khổ A4, tiêu đề "BẢNG CHẤM CÔNG",
 // thông tin nhân viên/cửa hàng, bảng ca làm, phần tổng kết + tiền công.
-// Tăng ca tính theo tổng giờ của cả ngày, vượt quá 8h/ngày.
+// Tăng ca tính theo tổng giờ của cả ngày, vượt quá giờ chuẩn của cửa hàng
+// (mặc định 8h/ngày, chủ cửa hàng đổi được ở tab Cài đặt).
 // Tiếng Việt dùng font Roboto kèm trong app (assets/fonts).
-const int standardMinutesPerDay = 480; // 8h/ngày
 
-/// Tăng ca của 1 ngày = số phút vượt quá 8h.
-int dayOvertimeMinutes(int dayTotalMinutes) =>
+/// Tăng ca của 1 ngày = số phút vượt quá giờ chuẩn.
+int dayOvertimeMinutes(int dayTotalMinutes, int standardMinutesPerDay) =>
     dayTotalMinutes > standardMinutesPerDay
         ? dayTotalMinutes - standardMinutesPerDay
         : 0;
@@ -40,9 +40,10 @@ Future<Uint8List> buildMonthPdf({
 
   final shifts = data.monthShifts(employee.name, year, month);
   final total = data.monthTotal(employee.name, year, month);
+  final standard = data.standardMinutesPerDay;
   var overtimeTotal = 0;
   for (final s in shifts) {
-    overtimeTotal += dayOvertimeMinutes(s.total ?? 0);
+    overtimeTotal += dayOvertimeMinutes(s.total ?? 0, standard);
   }
   final pay = total.minutes / 60 * employee.rate;
 
@@ -94,9 +95,9 @@ Future<Uint8List> buildMonthPdf({
               s.clockIn == null ? '—' : fmtHhmm(s.clockIn!),
               s.clockOut == null ? '—' : fmtHhmm(s.clockOut!),
               fmtDuration(s.total),
-              dayOvertimeMinutes(s.total ?? 0) == 0
+              dayOvertimeMinutes(s.total ?? 0, standard) == 0
                   ? '—'
-                  : fmtDuration(dayOvertimeMinutes(s.total ?? 0)),
+                  : fmtDuration(dayOvertimeMinutes(s.total ?? 0, standard)),
               notes.join(', '),
             ];
           }).toList(),
@@ -127,7 +128,7 @@ Future<Uint8List> buildMonthPdf({
             style: const pw.TextStyle(fontSize: 11)),
         pw.SizedBox(height: 4),
         pw.Text(
-            'Tăng ca (trên 8h/ngày): ${fmtDuration(overtimeTotal)}',
+            'Tăng ca (trên ${(standard / 60).toStringAsFixed(standard % 60 == 0 ? 0 : 1)}h/ngày): ${fmtDuration(overtimeTotal)}',
             style: const pw.TextStyle(fontSize: 11)),
         pw.SizedBox(height: 4),
         pw.Text(

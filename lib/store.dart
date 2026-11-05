@@ -48,8 +48,11 @@ class AppData {
   // key: tên nhân viên -> danh sách ca (mỗi ngày tối đa 1 ca)
   Map<String, List<Shift>> shifts;
   String? ownerHash; // SHA-256 của mật khẩu chủ, không lưu mật khẩu gốc
+  // Giờ chuẩn 1 ngày (phút) — tăng ca tính khi giờ công trong ngày vượt quá số này.
+  // Mặc định 480 phút = 8h, chủ cửa hàng đổi được ở tab Cài đặt.
+  int standardMinutesPerDay;
 
-  AppData({required this.storeName, required this.employees, Map<String, List<Shift>>? shifts, this.ownerHash})
+  AppData({required this.storeName, required this.employees, Map<String, List<Shift>>? shifts, this.ownerHash, this.standardMinutesPerDay = 480})
       : shifts = shifts ?? {};
 
   factory AppData.seed() => AppData(
@@ -62,6 +65,7 @@ class AppData {
         'employees': employees.map((e) => e.toJson()).toList(),
         'shifts': shifts.map((k, v) => MapEntry(k, v.map((s) => s.toJson()).toList())),
         'ownerHash': ownerHash,
+        'standardMinutesPerDay': standardMinutesPerDay,
       };
 
   factory AppData.fromJson(Map<String, dynamic> j) => AppData(
@@ -73,6 +77,7 @@ class AppData {
             k,
             (v as List).map((s) => Shift.fromJson(s as Map<String, dynamic>)).toList())),
         ownerHash: j['ownerHash'] as String?,
+        standardMinutesPerDay: (j['standardMinutesPerDay'] as num?)?.toInt() ?? 480,
       );
 
   Shift? shiftOn(String emp, String date) {

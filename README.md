@@ -3,6 +3,13 @@
 App chấm công cho máy tính, thay bản Python tkinter (bản đó mở lên là tắt luôn
 cmd vì máy không có Python/tkinter).
 
+## Giao diện
+
+App có 3 tab kiểu iOS ở thanh dưới cùng: **Chấm công** (bấm giờ trực tiếp,
+đồng hồ đếm giờ), **Báo cáo** (tổng hợp tháng + xuất PDF), **Cài đặt**
+— tab Cài đặt chỉ hiện khi chủ cửa hàng đăng nhập bằng mật khẩu (bấm nút
+khóa "Chủ cửa hàng" ở đầu tab Chấm công). Nhân viên không thấy nút Cài đặt.
+
 ## Tính năng
 
 - **Vào ca / Tan ca**: bấm nút, app ghi giờ máy tính.

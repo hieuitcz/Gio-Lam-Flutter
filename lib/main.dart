@@ -608,6 +608,7 @@ class _HomePageState extends State<HomePage> {
       if (path == null) return;
       final restored =
           AppData.fromJson(jsonDecode(await File(path).readAsString()));
+      if (!mounted) return;
       final ok = await showCupertinoDialog<bool>(
         context: context,
         builder: (ctx) => CupertinoAlertDialog(

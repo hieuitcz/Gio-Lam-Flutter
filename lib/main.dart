@@ -739,7 +739,7 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(width: 8),
               const Padding(
                 padding: EdgeInsets.only(bottom: 8),
-                child: Text('giờ hiện tại',
+                child: Text('Giờ hiện tại',
                     style: TextStyle(color: Colors.white60, fontSize: 13)),
               ),
             ]),
@@ -756,7 +756,7 @@ class _HomePageState extends State<HomePage> {
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: ChoiceChip(
-                      label: Text('${e.name} · ${e.rate}/giờ'),
+                      label: Text('${e.name} · ${e.rate} ${data.currency}/giờ'),
                       selected: selected,
                       onSelected: (_) => setState(() => _employee = e.name),
                       selectedColor: _accent,
@@ -1016,7 +1016,7 @@ class _HomePageState extends State<HomePage> {
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: ChoiceChip(
-                    label: Text('${e.name} · ${e.rate}/giờ'),
+                    label: Text('${e.name} · ${e.rate} ${data.currency}/giờ'),
                     selected: selected,
                     onSelected: (_) => setState(() => _employee = e.name),
                     selectedColor: _accent,
@@ -1058,15 +1058,15 @@ class _HomePageState extends State<HomePage> {
           _sectionTitle('Tổng hợp'),
           const SizedBox(height: 8),
           Row(children: [
-            _statCard('${total.days}', 'ngày làm'),
+            _statCard('${total.days}', 'Ngày làm'),
             const SizedBox(width: 10),
-            _statCard(fmtDuration(total.minutes), 'tổng giờ'),
+            _statCard(fmtDuration(total.minutes), 'Tổng giờ'),
           ]),
           const SizedBox(height: 10),
           Row(children: [
-            _statCard(fmtDuration(overtime), 'tăng ca'),
+            _statCard(fmtDuration(overtime), 'Tăng ca'),
             const SizedBox(width: 10),
-            _statCard(pay.toStringAsFixed(0), 'tiền công', highlight: true),
+            _statCard('${pay.toStringAsFixed(0)} ${data.currency}', 'Tiền công', highlight: true),
           ]),
           const SizedBox(height: 20),
           _sectionTitle('Xuất báo cáo'),
@@ -1513,7 +1513,9 @@ class _HomePageState extends State<HomePage> {
     if (s.clockOut == null && s.status == 'work') notes.add('chưa tan ca');
     if (s.breakMinutes > 0) notes.add('nghỉ ${s.breakMinutes}p');
     if (s.note.isNotEmpty) notes.add(s.note);
-    return notes.isEmpty ? 'Ca làm bình thường' : notes.join(' · ');
+    if (notes.isEmpty) return 'Ca làm bình thường';
+    final joined = notes.join(' · ');
+    return joined[0].toUpperCase() + joined.substring(1);
   }
 
   Widget _shiftRow(Shift s) {

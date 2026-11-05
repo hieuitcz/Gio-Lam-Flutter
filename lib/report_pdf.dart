@@ -94,6 +94,9 @@ Future<Uint8List> buildMonthPdf({
             }
             if (s.breakMinutes > 0) notes.add('nghỉ ${s.breakMinutes}p');
             if (s.note.isNotEmpty) notes.add(s.note);
+            if (notes.isNotEmpty) {
+              notes[0] = notes[0][0].toUpperCase() + notes[0].substring(1);
+            }
             final isWork = s.status == 'work';
             return [
               _dateStr(d),

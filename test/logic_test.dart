@@ -78,4 +78,40 @@ void main() {
     expect(sh.note, 'tăng ca');
     expect(sh.total, 630);
   });
+
+  test('nhieu doan ca/ngay: tan ca roi vao lai duoc, tong cong don', () {
+    final store = DataStore(File('/tmp/test-gio-lam-multi.json'));
+    store.data = AppData.seed();
+    // Doan 1: 9:00-12:00 (3h), doan 2: 14:00-20:00 (6h) cung ngay
+    store.clockIn('Hieu', when: DateTime(2026, 11, 5, 9, 0));
+    store.clockOut('Hieu', when: DateTime(2026, 11, 5, 12, 0));
+    store.clockIn('Hieu', when: DateTime(2026, 11, 5, 14, 0));
+    store.clockOut('Hieu', when: DateTime(2026, 11, 5, 20, 0));
+    final data = store.data;
+    expect(data.shiftsOn('Hieu', '2026-11-05').length, 2);
+    expect(data.dayTotalMinutes('Hieu', '2026-11-05'), 540);
+    expect(data.monthTotal('Hieu', 2026, 11), (days: 1, minutes: 540));
+    // 9h vuot 8h chuan -> tang ca 1h, tinh theo tong ngay
+    expect(data.dayOvertime('Hieu', '2026-11-05'), 60);
+    expect(data.monthOvertime('Hieu', 2026, 11), 60);
+  });
+
+  test('chua tan ca thi khong vao ca moi duoc', () {
+    final store = DataStore(File('/tmp/test-gio-lam-multi2.json'));
+    store.data = AppData.seed();
+    store.clockIn('Hieu', when: DateTime(2026, 11, 5, 9, 0));
+    expect(() => store.clockIn('Hieu', when: DateTime(2026, 11, 5, 14, 0)),
+        throwsStateError);
+  });
+
+  test('chu them doan trung gio bi chan', () {
+    final store = DataStore(File('/tmp/test-gio-lam-multi3.json'));
+    store.data = AppData.seed();
+    store.ownerAddShift('Hieu', '2026-11-05', '9:00', '12:00');
+    expect(() => store.ownerAddShift('Hieu', '2026-11-05', '11:00', '15:00'),
+        throwsStateError);
+    // Khong trung thi them duoc
+    store.ownerAddShift('Hieu', '2026-11-05', '13:00', '17:00');
+    expect(store.data.shiftsOn('Hieu', '2026-11-05').length, 2);
+  });
 }

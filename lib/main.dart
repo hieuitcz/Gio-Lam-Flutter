@@ -407,7 +407,7 @@ class _HomePageState extends State<HomePage> {
                     final ok = await _confirm(
                         'Xóa ngày', 'Xóa ca ngày $day của ${emp.name}?');
                     if (ok) {
-                      _s.deleteShift(emp.name, day);
+                      _s.deleteShift(shift);
                       await _save();
                       if (ctx.mounted) Navigator.pop(ctx, true);
                       _snack('Đã xóa ca ngày $day.');
@@ -422,12 +422,21 @@ class _HomePageState extends State<HomePage> {
               FilledButton(
                 onPressed: () {
                   try {
-                    _s.ownerSetShift(emp.name, dstr,
-                        inCtrl.text.isEmpty ? null : inCtrl.text,
-                        outCtrl.text.isEmpty ? null : outCtrl.text,
-                        status: status,
-                        breakMinutes: breakMinutes,
-                        note: noteCtrl.text.trim());
+                    if (shift != null) {
+                      _s.ownerUpdateShift(shift, emp.name, dstr,
+                          inCtrl.text.isEmpty ? null : inCtrl.text,
+                          outCtrl.text.isEmpty ? null : outCtrl.text,
+                          status: status,
+                          breakMinutes: breakMinutes,
+                          note: noteCtrl.text.trim());
+                    } else {
+                      _s.ownerAddShift(emp.name, dstr,
+                          inCtrl.text.isEmpty ? null : inCtrl.text,
+                          outCtrl.text.isEmpty ? null : outCtrl.text,
+                          status: status,
+                          breakMinutes: breakMinutes,
+                          note: noteCtrl.text.trim());
+                    }
                   } on StateError catch (e) {
                     _snack(e.message);
                     return;
@@ -694,8 +703,14 @@ class _HomePageState extends State<HomePage> {
     final data = _s.data;
     final emp = data.employees.where((e) => e.name == _employee).firstOrNull;
     final open = _employee == null ? null : data.openShift(_employee!);
-    final todayShift =
-        _employee == null ? null : data.shiftOn(_employee!, _todayStr);
+    final todaySegments = _employee == null
+        ? <Shift>[]
+        : data.shiftsOn(_employee!, _todayStr);
+    final todayClosed =
+        todaySegments.where((s) => s.clockOut != null).toList();
+    final todayTotal = _employee == null
+        ? 0
+        : data.dayTotalMinutes(_employee!, _todayStr);
     final weekday = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][_now.weekday % 7];
 
     return SingleChildScrollView(
@@ -845,7 +860,7 @@ class _HomePageState extends State<HomePage> {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          todayShift != null && todayShift.clockOut != null
+                          todayClosed.isNotEmpty
                               ? 'ĐÃ TAN CA HÔM NAY'
                               : 'CHƯA VÀO CA',
                           style: const TextStyle(
@@ -857,8 +872,8 @@ class _HomePageState extends State<HomePage> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        todayShift != null && todayShift.clockOut != null
-                            ? '${fmtHhmm(todayShift.clockIn!)} – ${fmtHhmm(todayShift.clockOut!)}'
+                        todayClosed.isNotEmpty
+                            ? '${fmtHhmm(todayClosed.first.clockIn ?? 0)} – ${fmtHhmm(todayClosed.last.clockOut!)}'
                             : '--:--',
                         style: const TextStyle(
                             fontSize: 40,
@@ -866,8 +881,8 @@ class _HomePageState extends State<HomePage> {
                             color: _ink),
                       ),
                       Text(
-                        todayShift != null && todayShift.clockOut != null
-                            ? 'Hôm nay làm ${fmtDuration(todayShift.total)}'
+                        todayClosed.isNotEmpty
+                            ? 'Hôm nay làm ${fmtDuration(todayTotal)}${todayClosed.length > 1 ? ' · ${todayClosed.length} đoạn ca' : ''}'
                             : 'Bấm Vào ca để bắt đầu tính giờ.',
                         style: const TextStyle(color: _muted, fontSize: 14),
                       ),
@@ -990,10 +1005,9 @@ class _HomePageState extends State<HomePage> {
         : data.monthTotal(emp.name, _month.year, _month.month);
     final rows =
         emp == null ? <Shift>[] : data.monthShifts(emp.name, _month.year, _month.month);
-    var overtime = 0;
-    for (final s in rows) {
-      overtime += dayOvertimeMinutes(s.total ?? 0, data.standardMinutesPerDay);
-    }
+    final overtime = emp == null
+        ? 0
+        : data.monthOvertime(emp.name, _month.year, _month.month);
     final pay = emp == null ? 0.0 : total.minutes / 60 * emp.rate;
 
     return SingleChildScrollView(

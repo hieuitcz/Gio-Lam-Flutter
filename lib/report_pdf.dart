@@ -13,6 +13,8 @@ import 'store.dart';
 // Tăng ca tính theo tổng giờ của cả ngày, vượt quá giờ chuẩn của cửa hàng
 // (mặc định 8h/ngày, chủ cửa hàng đổi được ở tab Cài đặt).
 // Tiếng Việt dùng font Roboto kèm trong app (assets/fonts).
+// 1 ngày có thể có nhiều đoạn ca: mỗi đoạn 1 dòng, tăng ca của ngày
+// chỉ ghi ở dòng cuối cùng của ngày đó — giống app iOS.
 
 /// Tăng ca của 1 ngày = số phút vượt quá giờ chuẩn.
 int dayOvertimeMinutes(int dayTotalMinutes, int standardMinutesPerDay) =>
@@ -25,6 +27,40 @@ String _dateStr(DateTime d) =>
 
 String _weekday(DateTime d) =>
     ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d.weekday % 7];
+
+/// 1 dòng trong bảng PDF cho 1 đoạn ca (shifts[i]).
+/// Tăng ca của ngày chỉ hiện ở dòng cuối cùng của ngày đó.
+List<String> _pdfRow(
+    List<Shift> shifts, int i, AppData data, String employeeName) {
+  final s = shifts[i];
+  final d = DateTime.parse(s.date);
+  final isLastOfDay =
+      i == shifts.length - 1 || shifts[i + 1].date != s.date;
+  final notes = <String>[];
+  if (s.status != 'work') notes.add(shiftStatusTitle(s.status));
+  if (s.inManual) notes.add('vào: nhập tay');
+  if (s.outManual) notes.add('ra: nhập tay');
+  if (s.clockOut == null && s.status == 'work') {
+    notes.add('chưa tan ca');
+  }
+  if (s.breakMinutes > 0) notes.add('nghỉ ${s.breakMinutes}p');
+  if (s.note.isNotEmpty) notes.add(s.note);
+  if (notes.isNotEmpty) {
+    notes[0] = notes[0][0].toUpperCase() + notes[0].substring(1);
+  }
+  final isWork = s.status == 'work';
+  final dayOt =
+      isLastOfDay ? data.dayOvertime(employeeName, s.date) : 0;
+  return [
+    _dateStr(d),
+    _weekday(d),
+    s.clockIn == null ? '—' : fmtHhmm(s.clockIn!),
+    s.clockOut == null ? '—' : fmtHhmm(s.clockOut!),
+    isWork ? fmtDuration(s.total) : '—',
+    !isWork || dayOt == 0 ? '—' : fmtDuration(dayOt),
+    notes.join(', '),
+  ];
+}
 
 Future<Uint8List> buildMonthPdf({
   required AppData data,
@@ -41,10 +77,9 @@ Future<Uint8List> buildMonthPdf({
   final shifts = data.monthShifts(employee.name, year, month);
   final total = data.monthTotal(employee.name, year, month);
   final standard = data.standardMinutesPerDay;
-  var overtimeTotal = 0;
-  for (final s in shifts) {
-    overtimeTotal += dayOvertimeMinutes(s.total ?? 0, standard);
-  }
+  // Tăng ca tính theo TỔNG giờ của cả ngày (cộng các đoạn ca),
+  // không tính riêng từng đoạn — giống app iOS.
+  final overtimeTotal = data.monthOvertime(employee.name, year, month);
   final pay = total.minutes / 60 * employee.rate;
 
   final doc = pw.Document(theme: theme);
@@ -83,33 +118,10 @@ Future<Uint8List> buildMonthPdf({
             'Tăng ca',
             'Ghi chú',
           ],
-          data: shifts.map((s) {
-            final d = DateTime.parse(s.date);
-            final notes = <String>[];
-            if (s.status != 'work') notes.add(shiftStatusTitle(s.status));
-            if (s.inManual) notes.add('vào: nhập tay');
-            if (s.outManual) notes.add('ra: nhập tay');
-            if (s.clockOut == null && s.status == 'work') {
-              notes.add('chưa tan ca');
-            }
-            if (s.breakMinutes > 0) notes.add('nghỉ ${s.breakMinutes}p');
-            if (s.note.isNotEmpty) notes.add(s.note);
-            if (notes.isNotEmpty) {
-              notes[0] = notes[0][0].toUpperCase() + notes[0].substring(1);
-            }
-            final isWork = s.status == 'work';
-            return [
-              _dateStr(d),
-              _weekday(d),
-              s.clockIn == null ? '—' : fmtHhmm(s.clockIn!),
-              s.clockOut == null ? '—' : fmtHhmm(s.clockOut!),
-              isWork ? fmtDuration(s.total) : '—',
-              !isWork || dayOvertimeMinutes(s.total ?? 0, standard) == 0
-                  ? '—'
-                  : fmtDuration(dayOvertimeMinutes(s.total ?? 0, standard)),
-              notes.join(', '),
-            ];
-          }).toList(),
+          data: [
+            for (var i = 0; i < shifts.length; i++)
+              _pdfRow(shifts, i, data, employee.name),
+          ],
           headerStyle: pw.TextStyle(font: bold, fontSize: 9),
           cellStyle: const pw.TextStyle(fontSize: 9),
           headerDecoration:

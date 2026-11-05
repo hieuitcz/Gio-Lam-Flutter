@@ -87,7 +87,9 @@ class Shift {
 class AppData {
   String storeName;
   List<Employee> employees;
-  // key: tên nhân viên -> danh sách ca (mỗi ngày tối đa 1 ca)
+  // key: tên nhân viên -> danh sách đoạn ca.
+  // 1 ngày có thể có NHIỀU đoạn ca (tan ca rồi vào ca lại được,
+  // chạy nhiều cửa hàng rồi quay lại vẫn tính tiếp) — giống app iOS.
   Map<String, List<Shift>> shifts;
   String? ownerHash; // SHA-256 của mật khẩu chủ, không lưu mật khẩu gốc
   // Giờ chuẩn 1 ngày (phút) — tăng ca tính khi giờ công trong ngày vượt quá số này.
@@ -126,13 +128,38 @@ class AppData {
         currency: j['currency'] as String? ?? 'Kč',
       );
 
-  Shift? shiftOn(String emp, String date) {
-    final list = shifts[emp];
-    if (list == null) return null;
-    for (final s in list) {
-      if (s.date == date) return s;
+  /// Tất cả đoạn ca của 1 ngày (đã sắp theo giờ vào).
+  List<Shift> shiftsOn(String emp, String date) {
+    final list = (shifts[emp] ?? []).where((s) => s.date == date).toList()
+      ..sort((a, b) => (a.clockIn ?? 0).compareTo(b.clockIn ?? 0));
+    return list;
+  }
+
+  /// Tổng giờ công (chỉ ca "Đi làm" đã chốt) của 1 ngày.
+  int dayTotalMinutes(String emp, String date) {
+    var total = 0;
+    for (final s in shiftsOn(emp, date)) {
+      if (s.status != 'work') continue;
+      total += s.total ?? 0;
     }
-    return null;
+    return total;
+  }
+
+  /// Tăng ca của 1 ngày = tổng giờ ngày đó vượt quá giờ chuẩn.
+  int dayOvertime(String emp, String date) =>
+      (dayTotalMinutes(emp, date) - standardMinutesPerDay).clamp(0, 24 * 60);
+
+  /// Tổng tăng ca cả tháng (cộng tăng ca từng ngày).
+  int monthOvertime(String emp, int year, int month) {
+    final dates = <String>{};
+    for (final s in monthShifts(emp, year, month)) {
+      dates.add(s.date);
+    }
+    var total = 0;
+    for (final d in dates) {
+      total += dayOvertime(emp, d);
+    }
+    return total;
   }
 
   Shift? openShift(String emp) {
@@ -153,37 +180,46 @@ class AppData {
       final d = DateTime.parse(s.date);
       return d.year == year && d.month == month;
     }).toList()
-      ..sort((a, b) => a.date.compareTo(b.date));
+      ..sort((a, b) {
+        final c = a.date.compareTo(b.date);
+        return c != 0 ? c : (a.clockIn ?? 0).compareTo(b.clockIn ?? 0);
+      });
   }
 
   ({int days, int minutes}) monthTotal(String emp, int year, int month) {
-    var days = 0;
+    final dates = <String>{};
     var minutes = 0;
     for (final s in monthShifts(emp, year, month)) {
       if (s.status != 'work') continue;
       final t = s.total;
       if (t != null) {
-        days++;
+        dates.add(s.date);
         minutes += t;
       }
     }
-    return (days: days, minutes: minutes);
+    return (days: dates.length, minutes: minutes);
   }
 
   /// Số ngày nghỉ phép của nhân viên trong 1 tháng.
   int monthLeaveDays(String emp, int year, int month, {String status = 'paidLeave'}) {
     return monthShifts(emp, year, month)
         .where((s) => s.status == status)
+        .map((s) => s.date)
+        .toSet()
         .length;
   }
 
   /// Số ngày nghỉ phép đã dùng trong 1 năm.
   int yearPaidLeaveUsed(String emp, int year) {
     final list = shifts[emp] ?? [];
-    return list.where((s) {
-      final d = DateTime.parse(s.date);
-      return d.year == year && s.status == 'paidLeave';
-    }).length;
+    return list
+        .where((s) {
+          final d = DateTime.parse(s.date);
+          return d.year == year && s.status == 'paidLeave';
+        })
+        .map((s) => s.date)
+        .toSet()
+        .length;
   }
 }
 
@@ -236,7 +272,8 @@ class DataStore {
       throw StateError('Ca trước chưa tan ca. Tan ca trước đã rồi mới vào ca mới được.');
     }
     final day = _dayStr(when);
-    if (data.shiftOn(emp, day) != null) throw StateError('Hôm nay đã có ca rồi.');
+    // Tan ca rồi vào ca lại được: 1 ngày nhiều đoạn ca (chạy nhiều
+    // cửa hàng, quay lại làm tiếp). Chỉ chặn khi ca trước chưa tan.
     final minutes = when.hour * 60 + when.minute;
     (data.shifts[emp] ??= []).add(Shift(day, clockIn: minutes));
   }
@@ -263,7 +300,7 @@ class DataStore {
     final minutes = parseHhmm(hhmm);
     if (minutes == null) throw StateError('Giờ sai định dạng. Nhập dạng 9:00 hoặc 20:00.');
     if (data.openShift(emp) != null) throw StateError('Ca trước chưa tan ca.');
-    if (data.shiftOn(emp, day) != null) throw StateError('Hôm nay đã có ca rồi.');
+    // Nhập tay tạo thêm 1 đoạn ca mới trong ngày (không ghi đè đoạn cũ).
     (data.shifts[emp] ??= []).add(Shift(day, clockIn: minutes, inManual: true));
   }
 
@@ -286,9 +323,27 @@ class DataStore {
     return shift;
   }
 
-  /// Chủ cửa hàng sửa/thêm ca ngày bất kỳ (kể cả ngày cũ).
-  void ownerSetShift(String emp, String date, String? clockIn, String? clockOut,
-      {String status = 'work', int breakMinutes = 0, String note = ''}) {
+  /// Kiểm tra đoạn ca mới/sửa có trùng giờ với đoạn khác cùng ngày không.
+  void _checkOverlap(String emp, String date, int? clockIn, int? clockOut,
+      {Shift? except}) {
+    if (clockIn == null || clockOut == null) return;
+    final aStart = clockIn;
+    final aEnd = clockOut < clockIn ? clockOut + 24 * 60 : clockOut;
+    for (final s in data.shiftsOn(emp, date)) {
+      if (identical(s, except) || s.status != 'work') continue;
+      if (s.clockIn == null || s.clockOut == null) continue;
+      final bStart = s.clockIn!;
+      final bEnd =
+          s.clockOut! < s.clockIn! ? s.clockOut! + 24 * 60 : s.clockOut!;
+      if (aStart < bEnd && bStart < aEnd) {
+        throw StateError(
+            'Trùng giờ với đoạn ca ${fmtHhmm(s.clockIn!)}–${fmtHhmm(s.clockOut!)} cùng ngày.');
+      }
+    }
+  }
+
+  ({int? ci, int? co}) _parseShiftTimes(
+      String? clockIn, String? clockOut, int breakMinutes) {
     final ci = clockIn == null || clockIn.isEmpty ? null : parseHhmm(clockIn);
     final co = clockOut == null || clockOut.isEmpty ? null : parseHhmm(clockOut);
     if ((clockIn != null && clockIn.isNotEmpty && ci == null) ||
@@ -298,25 +353,44 @@ class DataStore {
     if (breakMinutes < 0 || breakMinutes > 240) {
       throw StateError('Nghỉ giữa ca từ 0 đến 240 phút.');
     }
-    final existing = data.shiftOn(emp, date);
-    if (existing != null) {
-      existing.clockIn = ci;
-      existing.clockOut = co;
-      existing.status = status;
-      existing.breakMinutes = breakMinutes;
-      existing.note = note;
-    } else {
-      (data.shifts[emp] ??= []).add(Shift(date,
-          clockIn: ci,
-          clockOut: co,
-          status: status,
-          breakMinutes: breakMinutes,
-          note: note));
-    }
+    return (ci: ci, co: co);
   }
 
-  void deleteShift(String emp, String date) {
-    data.shifts[emp]?.removeWhere((s) => s.date == date);
+  /// Chủ cửa hàng THÊM 1 đoạn ca ngày bất kỳ (kể cả ngày cũ).
+  void ownerAddShift(String emp, String date, String? clockIn, String? clockOut,
+      {String status = 'work', int breakMinutes = 0, String note = ''}) {
+    final t = _parseShiftTimes(clockIn, clockOut, breakMinutes);
+    if (status == 'work') {
+      _checkOverlap(emp, date, t.ci, t.co);
+    }
+    (data.shifts[emp] ??= []).add(Shift(date,
+        clockIn: t.ci,
+        clockOut: t.co,
+        status: status,
+        breakMinutes: breakMinutes,
+        note: note));
+  }
+
+  /// Chủ cửa hàng SỬA 1 đoạn ca có sẵn.
+  void ownerUpdateShift(Shift shift, String emp, String date, String? clockIn,
+      String? clockOut,
+      {String status = 'work', int breakMinutes = 0, String note = ''}) {
+    final t = _parseShiftTimes(clockIn, clockOut, breakMinutes);
+    if (status == 'work') {
+      _checkOverlap(emp, date, t.ci, t.co, except: shift);
+    }
+    shift.date = date;
+    shift.clockIn = t.ci;
+    shift.clockOut = t.co;
+    shift.status = status;
+    shift.breakMinutes = breakMinutes;
+    shift.note = note;
+  }
+
+  void deleteShift(Shift shift) {
+    for (final list in data.shifts.values) {
+      list.remove(shift);
+    }
   }
 
   static String _dayStr(DateTime d) =>

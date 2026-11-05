@@ -6,8 +6,10 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'logic.dart';
 import 'report_pdf.dart';
@@ -15,7 +17,8 @@ import 'store.dart';
 
 // Giao diện kiểu app chấm công iOS: thanh tab dưới cùng (Chấm công / Báo cáo /
 // Cài đặt), nền xám nhóm, thẻ trắng bo tròn, tiêu đề lớn.
-// Tab Cài đặt chỉ chủ cửa hàng mới thấy — nhân viên không có nút này.
+// Tab Cài đặt chỉ chủ cửa hàng mới thấy — không có nút hiện ra ngoài,
+// mở bằng phím tắt Ctrl+H rồi nhập mật khẩu chủ.
 
 const _ink = Color(0xFF0F172A);
 const _muted = Color(0xFF64748B);
@@ -29,10 +32,27 @@ const _amberBg = Color(0xFFFEF3C7);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Cửa sổ nhỏ kiểu iPad (800x1024), không mở rộng to như màn hình PC.
+  await windowManager.ensureInitialized();
+  const options = WindowOptions(
+    size: Size(800, 1024),
+    minimumSize: Size(520, 720),
+    maximumSize: Size(900, 1150),
+    center: true,
+    title: 'Gio-Lam — Chấm công',
+  );
+  windowManager.waitUntilReadyToShow(options, () async {
+    await windowManager.show();
+    await windowManager.focus();
+  });
   final dir = await getApplicationDocumentsDirectory();
   final store = DataStore(File('${dir.path}/gio-lam.json'));
   await store.load();
   runApp(GioLamApp(store: store));
+}
+
+class _OwnerIntent extends Intent {
+  const _OwnerIntent();
 }
 
 class GioLamApp extends StatelessWidget {
@@ -250,7 +270,7 @@ class _HomePageState extends State<HomePage> {
     if (emp == null) return;
     final day = shift?.date ?? date ?? _todayStr;
     if (day != _todayStr && !_ownerMode) {
-      _snack('Ngày đã qua chỉ chủ cửa hàng mới sửa được. Bấm nút khóa ở trên rồi nhập mật khẩu.');
+      _snack('Ngày đã qua chỉ chủ cửa hàng mới sửa được. Nhấn Ctrl+H rồi nhập mật khẩu chủ.');
       return;
     }
     final inCtrl = TextEditingController(
@@ -637,15 +657,33 @@ class _HomePageState extends State<HomePage> {
       _reportTab(),
       if (_ownerMode) _settingsTab(),
     ];
-    return Scaffold(
-      body: IndexedStack(index: _tab, children: pages),
-      bottomNavigationBar: CupertinoTabBar(
-        currentIndex: _tab,
-        onTap: (i) => setState(() => _tab = i),
-        activeColor: _accent,
-        inactiveColor: CupertinoColors.systemGrey,
-        backgroundColor: Colors.white,
-        items: items,
+    // Phím tắt Ctrl+H mở đăng nhập chủ cửa hàng (không có nút hiện ngoài).
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.keyH, control: true):
+            _OwnerIntent(),
+      },
+      child: Actions(
+        actions: {
+          _OwnerIntent: CallbackAction<_OwnerIntent>(onInvoke: (_) {
+            _ownerLogin();
+            return null;
+          }),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            body: IndexedStack(index: _tab, children: pages),
+            bottomNavigationBar: CupertinoTabBar(
+              currentIndex: _tab,
+              onTap: (i) => setState(() => _tab = i),
+              activeColor: _accent,
+              inactiveColor: CupertinoColors.systemGrey,
+              backgroundColor: Colors.white,
+              items: items,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -683,31 +721,6 @@ class _HomePageState extends State<HomePage> {
                     letterSpacing: 1.5),
               ),
               const Spacer(),
-              CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                onPressed: _ownerLogin,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(
-                        _ownerMode
-                            ? CupertinoIcons.lock_open_fill
-                            : CupertinoIcons.lock_fill,
-                        color: Colors.white,
-                        size: 13),
-                    const SizedBox(width: 5),
-                    Text(_ownerMode ? 'Chủ cửa hàng' : 'Chủ cửa hàng',
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 12)),
-                  ]),
-                ),
-              ),
             ]),
             const SizedBox(height: 18),
             Text(

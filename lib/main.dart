@@ -32,7 +32,6 @@ const _teal = iosTeal;
 const _danger = iosRed;
 const _appVersion = '1.0.0';
 const _developerName = 'Hiếu Lê';
-const _supportUrl = 'https://fb.com/lehieuit';
 const _amber = iosOrange;
 const _amberBg = Color(0x1FFF9500);
 
@@ -251,8 +250,8 @@ class _HomePageState extends State<HomePage> {
     ]);
   }
 
-  // Popup Giới thiệu kiểu iOS: Dialog bo 28, căn giữa cân đối như sheet
-  // EntryEditor (không dùng CupertinoAlertDialog hẹp, 4 nút xếp chồng).
+  // Popup Giới thiệu kiểu iOS: Dialog bo 28, rộng và vuông (không dọc,
+  // không nhỏ) như sheet EntryEditor. Chỉ còn nút Hướng dẫn + Đóng.
   Future<void> _showAboutDialog() async {
     await showDialog(
       context: context,
@@ -263,10 +262,10 @@ class _HomePageState extends State<HomePage> {
         insetPadding:
             const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 440),
+          constraints: const BoxConstraints(maxWidth: 560),
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -283,9 +282,9 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   const SizedBox(height: 18),
-                  // Logo app + tên + phiên bản, căn giữa.
-                  Center(
-                    child: Container(
+                  // Logo + tên + phiên bản trên 1 hàng.
+                  Row(children: [
+                    Container(
                       width: 64,
                       height: 64,
                       decoration: BoxDecoration(
@@ -302,18 +301,24 @@ class _HomePageState extends State<HomePage> {
                       child: const Icon(Icons.access_time_filled,
                           color: Colors.white, size: 32),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('Chấm công by Hiếu Lê',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: _ink)),
-                  const SizedBox(height: 4),
-                  const Text('Chấm công $_appVersion',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 13, color: _muted)),
+                    const SizedBox(width: 14),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Chấm công by Hiếu Lê',
+                              style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: _ink)),
+                          SizedBox(height: 4),
+                          Text('Chấm công $_appVersion',
+                              style: TextStyle(
+                                  fontSize: 13, color: _muted)),
+                        ],
+                      ),
+                    ),
+                  ]),
                   const SizedBox(height: 18),
                   // Thẻ tác giả + liên hệ nền xám, các hàng ngăn bằng kẻ mờ.
                   Container(
@@ -330,11 +335,7 @@ class _HomePageState extends State<HomePage> {
                         _developerHeader(),
                         const SizedBox(height: 6),
                         ..._aboutContactRowsSeparated(),
-                        const SizedBox(height: 2),
-                        const Divider(height: 1, color: _line),
-                        const SizedBox(height: 10),
-                        _versionRow(),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 8),
                       ],
                     ),
                   ),
@@ -347,28 +348,6 @@ class _HomePageState extends State<HomePage> {
                       _showGuideDialog();
                     },
                   ),
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(
-                      child: TintedButton(
-                        label: 'Kiểm tra bản cập nhật',
-                        icon: Icons.system_update,
-                        tint: iosIndigo,
-                        onPressed: () => launchUrl(Uri.parse(_supportUrl),
-                            mode: LaunchMode.externalApplication),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TintedButton(
-                        label: 'Báo lỗi / Góp ý',
-                        icon: Icons.chat_bubble,
-                        tint: iosIndigo,
-                        onPressed: () => launchUrl(Uri.parse(_supportUrl),
-                            mode: LaunchMode.externalApplication),
-                      ),
-                    ),
-                  ]),
                   const SizedBox(height: 6),
                   TextButton(
                     onPressed: () => Navigator.pop(ctx),
@@ -398,8 +377,8 @@ class _HomePageState extends State<HomePage> {
     return out;
   }
 
-  // Popup Hướng dẫn kiểu iOS: tiêu đề căn giữa, nội dung chia mục có
-  // icon + gạch đầu dòng, nút Đóng gradient toàn chiều rộng.
+  // Popup Hướng dẫn kiểu iOS: rộng và vuông, 2 mục đặt cạnh nhau,
+  // tiêu đề căn giữa, nút Đã hiểu gradient toàn chiều rộng.
   Future<void> _showGuideDialog() async {
     await showDialog(
       context: context,
@@ -410,10 +389,10 @@ class _HomePageState extends State<HomePage> {
         insetPadding:
             const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
+          constraints: const BoxConstraints(maxWidth: 560),
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -436,25 +415,34 @@ class _HomePageState extends State<HomePage> {
                           fontWeight: FontWeight.bold,
                           color: _ink)),
                   const SizedBox(height: 18),
-                  _guideSection(
-                    icon: Icons.access_time_filled,
-                    tint: iosIndigo,
-                    title: 'Chấm công',
-                    bullets: const [
-                      'Đến làm: chọn tên mình rồi bấm Vào ca.',
-                      'Về: bấm Tan ca. Quên bấm thì nhập tay giờ ra trong ngày.',
-                      'Chạy đi cửa hàng khác rồi quay lại: tan ca rồi bấm Vào ca lại, 1 ngày chấm được nhiều lần.',
-                      'Ca đêm (vd 20:00–05:00) được tính vào ngày bắt đầu ca.',
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  _guideSection(
-                    icon: Icons.description,
-                    tint: _teal,
-                    title: 'Báo cáo',
-                    bullets: const [
-                      'Xem tổng giờ, tăng ca, tiền công theo tháng; bấm vào 1 ngày để sửa.',
-                      'Nút Xuất PDF để lưu bảng chấm công tháng.',
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _guideSection(
+                          icon: Icons.access_time_filled,
+                          tint: iosIndigo,
+                          title: 'Chấm công',
+                          bullets: const [
+                            'Đến làm: chọn tên mình rồi bấm Vào ca.',
+                            'Về: bấm Tan ca. Quên bấm thì nhập tay giờ ra trong ngày.',
+                            'Chạy đi cửa hàng khác rồi quay lại: tan ca rồi bấm Vào ca lại, 1 ngày chấm được nhiều lần.',
+                            'Ca đêm (vd 20:00–05:00) được tính vào ngày bắt đầu ca.',
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        child: _guideSection(
+                          icon: Icons.description,
+                          tint: _teal,
+                          title: 'Báo cáo',
+                          bullets: const [
+                            'Xem tổng giờ, tăng ca, tiền công theo tháng; bấm vào 1 ngày để sửa.',
+                            'Nút Xuất PDF để lưu bảng chấm công tháng.',
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -2035,30 +2023,6 @@ class _HomePageState extends State<HomePage> {
                 trailing: const Icon(Icons.chevron_right,
                     size: 16, color: _muted),
                 onTap: _showGuideDialog,
-              ),
-              const Divider(height: 1, color: _line),
-              ListTile(
-                leading: const IconTile(
-                    icon: Icons.system_update,
-                    tint: iosBlue),
-                title: const Text('Kiểm tra bản cập nhật'),
-                subtitle: const Text('Nhắn qua Facebook Hiếu Lê'),
-                trailing: const Icon(Icons.chevron_right,
-                    size: 16, color: _muted),
-                onTap: () => launchUrl(Uri.parse(_supportUrl),
-                    mode: LaunchMode.externalApplication),
-              ),
-              const Divider(height: 1, color: _line),
-              ListTile(
-                leading: const IconTile(
-                    icon: Icons.chat_bubble,
-                    tint: iosBlue),
-                title: const Text('Báo lỗi / Góp ý'),
-                subtitle: const Text('Nhắn qua Facebook Hiếu Lê'),
-                trailing: const Icon(Icons.chevron_right,
-                    size: 16, color: _muted),
-                onTap: () => launchUrl(Uri.parse(_supportUrl),
-                    mode: LaunchMode.externalApplication),
               ),
             ]),
           ),

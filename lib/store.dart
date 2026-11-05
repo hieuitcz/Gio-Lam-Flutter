@@ -98,11 +98,7 @@ class AppData {
   int standardMinutesPerDay;
   // Loại tiền lương: 'Kč' hoặc 'đ' (giống app iOS).
   String currency;
-  // Thông tin người code app — hiện ở mục Giới thiệu, chủ sửa được.
-  String developerName;
-  String developerContact;
-
-  AppData({required this.storeName, required this.employees, Map<String, List<Shift>>? shifts, this.ownerHash, this.standardMinutesPerDay = 480, this.currency = 'Kč', this.developerName = 'Hiếu', this.developerContact = 'github.com/hieuitcz'})
+  AppData({required this.storeName, required this.employees, Map<String, List<Shift>>? shifts, this.ownerHash, this.standardMinutesPerDay = 480, this.currency = 'Kč'})
       : shifts = shifts ?? {};
 
   factory AppData.seed() => AppData(
@@ -117,8 +113,6 @@ class AppData {
         'ownerHash': ownerHash,
         'standardMinutesPerDay': standardMinutesPerDay,
         'currency': currency,
-        'developerName': developerName,
-        'developerContact': developerContact,
       };
 
   factory AppData.fromJson(Map<String, dynamic> j) => AppData(
@@ -132,8 +126,6 @@ class AppData {
         ownerHash: j['ownerHash'] as String?,
         standardMinutesPerDay: (j['standardMinutesPerDay'] as num?)?.toInt() ?? 480,
         currency: j['currency'] as String? ?? 'Kč',
-        developerName: j['developerName'] as String? ?? 'Hiếu',
-        developerContact: j['developerContact'] as String? ?? 'github.com/hieuitcz',
       );
 
   /// Tất cả đoạn ca của 1 ngày (đã sắp theo giờ vào).

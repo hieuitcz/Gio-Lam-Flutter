@@ -29,8 +29,8 @@ const _accent = Color(0xFF0D9488);
 const _accentDark = Color(0xFF0F766E);
 const _danger = Color(0xFFDC2626);
 const _appVersion = '1.0.0';
-const _releasesUrl = 'https://github.com/hieuitcz/Gio-Lam-Flutter/releases';
-const _issuesUrl = 'https://github.com/hieuitcz/Gio-Lam-Flutter/issues/new';
+const _developerName = 'Hiếu Lê';
+const _supportUrl = 'https://fb.com/lehieuit';
 const _amber = Color(0xFFB45309);
 const _amberBg = Color(0xFFFEF3C7);
 
@@ -136,20 +136,19 @@ class _HomePageState extends State<HomePage> {
 
   // --- Giới thiệu + Hỗ trợ: ai cũng xem được (nut ⓘ ở đầu tab Chấm công) ---
   Future<void> _showAboutDialog() async {
-    final data = _s.data;
     await showCupertinoDialog(
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
         title: const Text('Gio-Lam — Chấm công'),
-        content: Column(
+        content: const Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 8),
-            const Text('Phiên bản $_appVersion'),
-            const SizedBox(height: 4),
-            Text('Phát triển bởi ${data.developerName}'),
-            const SizedBox(height: 4),
-            Text('Liên hệ: ${data.developerContact}'),
+            SizedBox(height: 8),
+            Text('Phiên bản Chấm công $_appVersion'),
+            SizedBox(height: 4),
+            Text('Phát triển bởi $_developerName'),
+            SizedBox(height: 4),
+            Text('Liên hệ: $_supportUrl'),
           ],
         ),
         actions: [
@@ -161,12 +160,12 @@ class _HomePageState extends State<HomePage> {
             child: const Text('Hướng dẫn sử dụng'),
           ),
           CupertinoDialogAction(
-            onPressed: () => launchUrl(Uri.parse(_releasesUrl),
+            onPressed: () => launchUrl(Uri.parse(_supportUrl),
                 mode: LaunchMode.externalApplication),
-            child: const Text('Kiểm tra bản mới'),
+            child: const Text('Kiểm tra bản cập nhật'),
           ),
           CupertinoDialogAction(
-            onPressed: () => launchUrl(Uri.parse(_issuesUrl),
+            onPressed: () => launchUrl(Uri.parse(_supportUrl),
                 mode: LaunchMode.externalApplication),
             child: const Text('Báo lỗi / Góp ý'),
           ),
@@ -194,10 +193,7 @@ class _HomePageState extends State<HomePage> {
             '• Ca đêm (vd 20:00–05:00) được tính vào ngày bắt đầu ca.\n\n'
             'Báo cáo\n'
             '• Xem tổng giờ, tăng ca, tiền công theo tháng; bấm vào 1 ngày để sửa.\n'
-            '• Nút Xuất PDF để lưu bảng chấm công tháng.\n\n'
-            'Chủ cửa hàng\n'
-            '• Nhấn Ctrl+H rồi nhập mật khẩu để mở tab Cài đặt (thêm nhân viên, giờ chuẩn, sao lưu dữ liệu).\n'
-            '• Dữ liệu được ký chống sửa; file sao lưu xuất ra trong Cài đặt.',
+            '• Nút Xuất PDF để lưu bảng chấm công tháng.',
             style: TextStyle(fontSize: 14, height: 1.5),
           ),
         ),
@@ -390,29 +386,6 @@ class _HomePageState extends State<HomePage> {
     _s.setOwnerPassword(pw);
     await _save();
     _snack('Đã đổi mật khẩu chủ.');
-  }
-
-  Future<String?> _askText(String title, String initial) async {
-    final ctrl = TextEditingController(text: initial);
-    return showCupertinoDialog<String>(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: CupertinoTextField(controller: ctrl),
-        ),
-        actions: [
-          CupertinoDialogAction(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Hủy')),
-          CupertinoDialogAction(
-              isDefaultAction: true,
-              onPressed: () => Navigator.pop(ctx, ctrl.text),
-              child: const Text('Lưu')),
-        ],
-      ),
-    );
   }
 
   // --- Sửa/thêm từng ngày (EntryEditor kiểu iOS) ---
@@ -1575,50 +1548,29 @@ class _HomePageState extends State<HomePage> {
           _sectionTitle('Giới thiệu'),
           const SizedBox(height: 8),
           _card(
-            Column(children: [
+            const Column(children: [
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(CupertinoIcons.person_fill,
+                leading: Icon(CupertinoIcons.person_fill,
                     size: 20, color: _muted),
-                title: const Text('Phát triển bởi'),
-                subtitle: Text(data.developerName),
-                trailing: const Icon(CupertinoIcons.pencil,
-                    size: 16, color: _muted),
-                onTap: () async {
-                  final v = await _askText(
-                      'Tên người phát triển', data.developerName);
-                  if (v != null && v.trim().isNotEmpty) {
-                    setState(() => data.developerName = v.trim());
-                    await _save();
-                  }
-                },
+                title: Text('Phát triển bởi'),
+                subtitle: Text(_developerName),
               ),
-              const Divider(height: 1, color: _line),
+              Divider(height: 1, color: _line),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(CupertinoIcons.at,
+                leading: Icon(CupertinoIcons.at,
                     size: 20, color: _muted),
-                title: const Text('Liên hệ'),
-                subtitle: Text(data.developerContact),
-                trailing: const Icon(CupertinoIcons.pencil,
-                    size: 16, color: _muted),
-                onTap: () async {
-                  final v = await _askText(
-                      'Liên hệ (số điện thoại / Zalo / link)',
-                      data.developerContact);
-                  if (v != null && v.trim().isNotEmpty) {
-                    setState(() => data.developerContact = v.trim());
-                    await _save();
-                  }
-                },
+                title: Text('Liên hệ'),
+                subtitle: Text(_supportUrl),
               ),
-              const Divider(height: 1, color: _line),
-              const ListTile(
+              Divider(height: 1, color: _line),
+              ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(CupertinoIcons.info_circle,
                     size: 20, color: _muted),
                 title: Text('Phiên bản'),
-                subtitle: Text('Gio-Lam $_appVersion'),
+                subtitle: Text('Chấm công $_appVersion'),
               ),
             ]),
           ),
@@ -1645,11 +1597,11 @@ class _HomePageState extends State<HomePage> {
                 leading: const Icon(
                     CupertinoIcons.arrow_down_circle_fill,
                     color: _muted),
-                title: const Text('Kiểm tra bản mới'),
-                subtitle: const Text('Mở trang tải bản mới nhất'),
+                title: const Text('Kiểm tra bản cập nhật'),
+                subtitle: const Text('Nhắn qua Facebook Hiếu Lê'),
                 trailing: const Icon(CupertinoIcons.chevron_right,
                     size: 16, color: _muted),
-                onTap: () => launchUrl(Uri.parse(_releasesUrl),
+                onTap: () => launchUrl(Uri.parse(_supportUrl),
                     mode: LaunchMode.externalApplication),
               ),
               const Divider(height: 1, color: _line),
@@ -1658,9 +1610,10 @@ class _HomePageState extends State<HomePage> {
                     CupertinoIcons.chat_bubble_text_fill,
                     color: _muted),
                 title: const Text('Báo lỗi / Góp ý'),
+                subtitle: const Text('Nhắn qua Facebook Hiếu Lê'),
                 trailing: const Icon(CupertinoIcons.chevron_right,
                     size: 16, color: _muted),
-                onTap: () => launchUrl(Uri.parse(_issuesUrl),
+                onTap: () => launchUrl(Uri.parse(_supportUrl),
                     mode: LaunchMode.externalApplication),
               ),
             ]),

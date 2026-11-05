@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -44,5 +45,37 @@ void main() {
     expect(sh.total, 540);
     // Nhap tay ngay cu bi chan
     expect(() => store.manualIn('Hoan', '9:00', now: DateTime(2026, 11, 1)), throwsStateError);
+  });
+
+  test('trang thai nghi khong tinh gio, nghi giua ca tru gio', () {
+    final s = Shift('2026-11-05', clockIn: 9 * 60, clockOut: 20 * 60, breakMinutes: 60);
+    expect(s.total, 600); // 11h - 1h nghi = 10h00
+    final leave = Shift('2026-11-06', status: 'paidLeave');
+    expect(leave.total, 0);
+    final data = AppData.seed();
+    data.shifts['Hieu'] = [s, leave];
+    expect(data.monthTotal('Hieu', 2026, 11), (days: 1, minutes: 600));
+    expect(data.monthLeaveDays('Hieu', 2026, 11), 1);
+    expect(data.yearPaidLeaveUsed('Hieu', 2026), 1);
+  });
+
+  test('sao luu JSON giu nguyen du lieu moi', () {
+    final data = AppData.seed();
+    data.currency = 'đ';
+    data.standardMinutesPerDay = 720;
+    data.employees.first.annualLeaveAllowance = 12;
+    data.shifts['Hieu'] = [
+      Shift('2026-11-05', clockIn: 540, clockOut: 1200,
+          status: 'work', breakMinutes: 30, note: 'tăng ca')
+    ];
+    final restored = AppData.fromJson(
+        jsonDecode(jsonEncode(data.toJson())) as Map<String, dynamic>);
+    expect(restored.currency, 'đ');
+    expect(restored.standardMinutesPerDay, 720);
+    expect(restored.employees.first.annualLeaveAllowance, 12);
+    final sh = restored.shifts['Hieu']!.first;
+    expect(sh.breakMinutes, 30);
+    expect(sh.note, 'tăng ca');
+    expect(sh.total, 630);
   });
 }

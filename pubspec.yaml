@@ -15,6 +15,7 @@ dependencies:
   pdf: ^3.11.3
   image: 4.5.4 # image 4.11.0 khong tuong thich voi archive 4.0.9 (thieu decodeLazy)
   open_filex: ^4.5.0
+  file_picker: ^8.1.0 # chon file sao lưu JSON de khoi phuc
 
 dev_dependencies:
   flutter_test:

@@ -8,13 +8,32 @@ import 'logic.dart';
 /// Dữ liệu app lưu trong 1 file JSON (gio-lam.json) — không cần server,
 /// không cần mạng. File nằm trong thư mục dữ liệu của app trên máy tính.
 
+// Trạng thái ca — giống app iOS (WorkStatus): chỉ ca "Đi làm" mới tính giờ.
+const List<(String, String)> shiftStatuses = [
+  ('work', 'Đi làm'),
+  ('paidLeave', 'Nghỉ phép'),
+  ('unpaidLeave', 'Nghỉ không lương'),
+  ('holiday', 'Nghỉ lễ'),
+];
+
+String shiftStatusTitle(String status) =>
+    shiftStatuses.firstWhere((s) => s.$1 == status, orElse: () => ('work', 'Đi làm')).$2;
+
 class Employee {
   String name;
   int rate;
-  Employee(this.name, this.rate);
-  Map<String, dynamic> toJson() => {'name': name, 'rate': rate};
-  factory Employee.fromJson(Map<String, dynamic> j) =>
-      Employee(j['name'] as String, (j['rate'] as num).toInt());
+  int annualLeaveAllowance; // tổng ngày phép năm
+  Employee(this.name, this.rate, {this.annualLeaveAllowance = 0});
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'rate': rate,
+        'annualLeaveAllowance': annualLeaveAllowance,
+      };
+  factory Employee.fromJson(Map<String, dynamic> j) => Employee(
+        j['name'] as String,
+        (j['rate'] as num).toInt(),
+        annualLeaveAllowance: (j['annualLeaveAllowance'] as num?)?.toInt() ?? 0,
+      );
 }
 
 class Shift {
@@ -23,15 +42,35 @@ class Shift {
   int? clockOut;
   bool inManual;
   bool outManual;
-  Shift(this.date, {this.clockIn, this.clockOut, this.inManual = false, this.outManual = false});
+  String status; // work | paidLeave | unpaidLeave | holiday
+  int breakMinutes; // nghỉ giữa ca
+  String note; // ghi chú
+  Shift(this.date,
+      {this.clockIn,
+      this.clockOut,
+      this.inManual = false,
+      this.outManual = false,
+      this.status = 'work',
+      this.breakMinutes = 0,
+      this.note = ''});
 
-  int? get total => durationMinutes(clockIn, clockOut);
+  /// Giờ công: chỉ ca "Đi làm" mới tính, trừ nghỉ giữa ca.
+  int? get total {
+    if (status != 'work') return 0;
+    final d = durationMinutes(clockIn, clockOut);
+    if (d == null) return null;
+    return (d - breakMinutes).clamp(0, 24 * 60);
+  }
+
   Map<String, dynamic> toJson() => {
         'date': date,
         'clockIn': clockIn,
         'clockOut': clockOut,
         'inManual': inManual,
         'outManual': outManual,
+        'status': status,
+        'breakMinutes': breakMinutes,
+        'note': note,
       };
   factory Shift.fromJson(Map<String, dynamic> j) => Shift(
         j['date'] as String,
@@ -39,6 +78,9 @@ class Shift {
         clockOut: j['clockOut'] as int?,
         inManual: j['inManual'] as bool? ?? false,
         outManual: j['outManual'] as bool? ?? false,
+        status: j['status'] as String? ?? 'work',
+        breakMinutes: (j['breakMinutes'] as num?)?.toInt() ?? 0,
+        note: j['note'] as String? ?? '',
       );
 }
 
@@ -51,8 +93,10 @@ class AppData {
   // Giờ chuẩn 1 ngày (phút) — tăng ca tính khi giờ công trong ngày vượt quá số này.
   // Mặc định 480 phút = 8h, chủ cửa hàng đổi được ở tab Cài đặt.
   int standardMinutesPerDay;
+  // Loại tiền lương: 'Kč' hoặc 'đ' (giống app iOS).
+  String currency;
 
-  AppData({required this.storeName, required this.employees, Map<String, List<Shift>>? shifts, this.ownerHash, this.standardMinutesPerDay = 480})
+  AppData({required this.storeName, required this.employees, Map<String, List<Shift>>? shifts, this.ownerHash, this.standardMinutesPerDay = 480, this.currency = 'Kč'})
       : shifts = shifts ?? {};
 
   factory AppData.seed() => AppData(
@@ -66,6 +110,7 @@ class AppData {
         'shifts': shifts.map((k, v) => MapEntry(k, v.map((s) => s.toJson()).toList())),
         'ownerHash': ownerHash,
         'standardMinutesPerDay': standardMinutesPerDay,
+        'currency': currency,
       };
 
   factory AppData.fromJson(Map<String, dynamic> j) => AppData(
@@ -78,6 +123,7 @@ class AppData {
             (v as List).map((s) => Shift.fromJson(s as Map<String, dynamic>)).toList())),
         ownerHash: j['ownerHash'] as String?,
         standardMinutesPerDay: (j['standardMinutesPerDay'] as num?)?.toInt() ?? 480,
+        currency: j['currency'] as String? ?? 'Kč',
       );
 
   Shift? shiftOn(String emp, String date) {
@@ -114,6 +160,7 @@ class AppData {
     var days = 0;
     var minutes = 0;
     for (final s in monthShifts(emp, year, month)) {
+      if (s.status != 'work') continue;
       final t = s.total;
       if (t != null) {
         days++;
@@ -121,6 +168,22 @@ class AppData {
       }
     }
     return (days: days, minutes: minutes);
+  }
+
+  /// Số ngày nghỉ phép của nhân viên trong 1 tháng.
+  int monthLeaveDays(String emp, int year, int month, {String status = 'paidLeave'}) {
+    return monthShifts(emp, year, month)
+        .where((s) => s.status == status)
+        .length;
+  }
+
+  /// Số ngày nghỉ phép đã dùng trong 1 năm.
+  int yearPaidLeaveUsed(String emp, int year) {
+    final list = shifts[emp] ?? [];
+    return list.where((s) {
+      final d = DateTime.parse(s.date);
+      return d.year == year && s.status == 'paidLeave';
+    }).length;
   }
 }
 
@@ -224,20 +287,36 @@ class DataStore {
   }
 
   /// Chủ cửa hàng sửa/thêm ca ngày bất kỳ (kể cả ngày cũ).
-  void ownerSetShift(String emp, String date, String? clockIn, String? clockOut) {
+  void ownerSetShift(String emp, String date, String? clockIn, String? clockOut,
+      {String status = 'work', int breakMinutes = 0, String note = ''}) {
     final ci = clockIn == null || clockIn.isEmpty ? null : parseHhmm(clockIn);
     final co = clockOut == null || clockOut.isEmpty ? null : parseHhmm(clockOut);
     if ((clockIn != null && clockIn.isNotEmpty && ci == null) ||
         (clockOut != null && clockOut.isNotEmpty && co == null)) {
       throw StateError('Giờ sai định dạng. Nhập dạng 9:00 hoặc 20:00.');
     }
+    if (breakMinutes < 0 || breakMinutes > 240) {
+      throw StateError('Nghỉ giữa ca từ 0 đến 240 phút.');
+    }
     final existing = data.shiftOn(emp, date);
     if (existing != null) {
       existing.clockIn = ci;
       existing.clockOut = co;
+      existing.status = status;
+      existing.breakMinutes = breakMinutes;
+      existing.note = note;
     } else {
-      (data.shifts[emp] ??= []).add(Shift(date, clockIn: ci, clockOut: co));
+      (data.shifts[emp] ??= []).add(Shift(date,
+          clockIn: ci,
+          clockOut: co,
+          status: status,
+          breakMinutes: breakMinutes,
+          note: note));
     }
+  }
+
+  void deleteShift(String emp, String date) {
+    data.shifts[emp]?.removeWhere((s) => s.date == date);
   }
 
   static String _dayStr(DateTime d) =>

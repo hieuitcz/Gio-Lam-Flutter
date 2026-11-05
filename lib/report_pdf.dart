@@ -70,7 +70,7 @@ Future<Uint8List> buildMonthPdf({
             style: const pw.TextStyle(fontSize: 11)),
         pw.SizedBox(height: 4),
         pw.Text(
-            'Đơn giá: ${employee.rate}/giờ',
+            'Đơn giá: ${employee.rate} ${data.currency}/giờ',
             style: const pw.TextStyle(fontSize: 11)),
         pw.SizedBox(height: 16),
         pw.TableHelper.fromTextArray(
@@ -86,16 +86,22 @@ Future<Uint8List> buildMonthPdf({
           data: shifts.map((s) {
             final d = DateTime.parse(s.date);
             final notes = <String>[];
+            if (s.status != 'work') notes.add(shiftStatusTitle(s.status));
             if (s.inManual) notes.add('vào: nhập tay');
             if (s.outManual) notes.add('ra: nhập tay');
-            if (s.clockOut == null) notes.add('chưa tan ca');
+            if (s.clockOut == null && s.status == 'work') {
+              notes.add('chưa tan ca');
+            }
+            if (s.breakMinutes > 0) notes.add('nghỉ ${s.breakMinutes}p');
+            if (s.note.isNotEmpty) notes.add(s.note);
+            final isWork = s.status == 'work';
             return [
               _dateStr(d),
               _weekday(d),
               s.clockIn == null ? '—' : fmtHhmm(s.clockIn!),
               s.clockOut == null ? '—' : fmtHhmm(s.clockOut!),
-              fmtDuration(s.total),
-              dayOvertimeMinutes(s.total ?? 0, standard) == 0
+              isWork ? fmtDuration(s.total) : '—',
+              !isWork || dayOvertimeMinutes(s.total ?? 0, standard) == 0
                   ? '—'
                   : fmtDuration(dayOvertimeMinutes(s.total ?? 0, standard)),
               notes.join(', '),
@@ -132,7 +138,11 @@ Future<Uint8List> buildMonthPdf({
             style: const pw.TextStyle(fontSize: 11)),
         pw.SizedBox(height: 4),
         pw.Text(
-            'Tiền công: ${pay.toStringAsFixed(0)} (giá ${employee.rate}/giờ)',
+            'Nghỉ phép: ${data.monthLeaveDays(employee.name, year, month)} ngày',
+            style: const pw.TextStyle(fontSize: 11)),
+        pw.SizedBox(height: 4),
+        pw.Text(
+            'Tiền công: ${pay.toStringAsFixed(0)} ${data.currency} (giá ${employee.rate} ${data.currency}/giờ)',
             style: pw.TextStyle(font: bold, fontSize: 11)),
       ],
     ),

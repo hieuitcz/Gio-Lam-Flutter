@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
@@ -240,29 +243,196 @@ class _HomePageState extends State<HomePage> {
     _snack('Đã đổi mật khẩu chủ.');
   }
 
-  // --- Sửa ca ngày cũ (chỉ chủ) ---
-  Future<void> _editShift(Shift shift) async {
-    if (!_ownerMode) {
-      _snack(
-          'Ngày đã qua chỉ chủ cửa hàng mới sửa được. Bấm nút khóa ở trên rồi nhập mật khẩu.');
+  // --- Sửa/thêm từng ngày (EntryEditor kiểu iOS) ---
+  // Ngày hôm nay ai cũng sửa được; ngày đã qua chỉ chủ cửa hàng mới sửa.
+  Future<void> _showEntryEditor({Shift? shift, String? date}) async {
+    final emp = _s.data.employees.where((e) => e.name == _employee).firstOrNull;
+    if (emp == null) return;
+    final day = shift?.date ?? date ?? _todayStr;
+    if (day != _todayStr && !_ownerMode) {
+      _snack('Ngày đã qua chỉ chủ cửa hàng mới sửa được. Bấm nút khóa ở trên rồi nhập mật khẩu.');
       return;
     }
-    final ci = await _askTime(
-        'Sửa giờ vào', shift.clockIn == null ? '' : fmtHhmm(shift.clockIn!));
-    if (ci == null) return;
-    final co = await _askTime(
-        'Sửa giờ ra', shift.clockOut == null ? '' : fmtHhmm(shift.clockOut!));
-    if (co == null) return;
-    await _act(() async {
-      _s.ownerSetShift(_employee!, shift.date, ci.isEmpty ? null : ci,
-          co.isEmpty ? null : co);
-    }, 'Đã cập nhật ca.');
+    final inCtrl = TextEditingController(
+        text: shift?.clockIn == null ? '' : fmtHhmm(shift!.clockIn!));
+    final outCtrl = TextEditingController(
+        text: shift?.clockOut == null ? '' : fmtHhmm(shift!.clockOut!));
+    final noteCtrl = TextEditingController(text: shift?.note ?? '');
+    var status = shift?.status ?? 'work';
+    var breakMinutes = shift?.breakMinutes ?? 0;
+    var datePicked = DateTime.parse(day);
+
+    Future<void> pickDate(StateSetter setState) async {
+      final picked = await showDatePicker(
+        context: context,
+        initialDate: datePicked,
+        firstDate: DateTime(2020),
+        lastDate: DateTime.now().add(const Duration(days: 365)),
+      );
+      if (picked != null) setState(() => datePicked = picked);
+    }
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) {
+          final dstr =
+              '${datePicked.year}-${datePicked.month.toString().padLeft(2, '0')}-${datePicked.day.toString().padLeft(2, '0')}';
+          final ci = parseHhmm(inCtrl.text);
+          final co = parseHhmm(outCtrl.text);
+          final total = status == 'work'
+              ? durationMinutes(ci, co) == null
+                  ? null
+                  : ((durationMinutes(ci, co)! - breakMinutes).clamp(0, 24 * 60))
+              : 0;
+          return AlertDialog(
+            title: Text(shift == null ? 'Thêm ngày' : 'Sửa ngày $day'),
+            content: SingleChildScrollView(
+              child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (shift == null)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Ngày'),
+                        subtitle: Text(
+                            '${datePicked.day}/${datePicked.month}/${datePicked.year}'),
+                        trailing: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: () => pickDate(setState),
+                          child: const Text('Chọn ngày'),
+                        ),
+                      ),
+                    const Text('Trạng thái',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      children: shiftStatuses.map((s) {
+                        final selected = status == s.$1;
+                        return ChoiceChip(
+                          label: Text(s.$2),
+                          selected: selected,
+                          onSelected: (_) =>
+                              setState(() => status = s.$1),
+                          selectedColor: _accent,
+                          labelStyle: TextStyle(
+                              color: selected ? Colors.white : _ink),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(children: [
+                      Expanded(
+                        child: TextField(
+                          controller: inCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Giờ vào (vd 9:00)',
+                              border: OutlineInputBorder()),
+                          keyboardType: TextInputType.datetime,
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: outCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Giờ ra (vd 20:00)',
+                              border: OutlineInputBorder()),
+                          keyboardType: TextInputType.datetime,
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 12),
+                    Row(children: [
+                      const Text('Nghỉ giữa ca: '),
+                      IconButton(
+                        icon: const Icon(CupertinoIcons.minus_circle_fill),
+                        color: _accent,
+                        onPressed: breakMinutes <= 0
+                            ? null
+                            : () => setState(() => breakMinutes -= 5),
+                      ),
+                      Text('$breakMinutes phút',
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      IconButton(
+                        icon: const Icon(CupertinoIcons.plus_circle_fill),
+                        color: _accent,
+                        onPressed: breakMinutes >= 240
+                            ? null
+                            : () => setState(() => breakMinutes += 5),
+                      ),
+                    ]),
+                    TextField(
+                      controller: noteCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Ghi chú (vd: tăng ca, đi muộn…)',
+                          border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Giờ công: ${total == null ? '--' : fmtDuration(total)}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, color: _accentDark),
+                    ),
+                  ]),
+            ),
+            actions: [
+              if (shift != null)
+                TextButton(
+                  onPressed: () async {
+                    final ok = await _confirm(
+                        'Xóa ngày', 'Xóa ca ngày $day của ${emp.name}?');
+                    if (ok) {
+                      _s.deleteShift(emp.name, day);
+                      await _save();
+                      if (ctx.mounted) Navigator.pop(ctx, true);
+                      _snack('Đã xóa ca ngày $day.');
+                    }
+                  },
+                  child:
+                      const Text('Xóa', style: TextStyle(color: _danger)),
+                ),
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Hủy')),
+              FilledButton(
+                onPressed: () {
+                  try {
+                    _s.ownerSetShift(emp.name, dstr,
+                        inCtrl.text.isEmpty ? null : inCtrl.text,
+                        outCtrl.text.isEmpty ? null : outCtrl.text,
+                        status: status,
+                        breakMinutes: breakMinutes,
+                        note: noteCtrl.text.trim());
+                  } on StateError catch (e) {
+                    _snack(e.message);
+                    return;
+                  }
+                  Navigator.pop(ctx, true);
+                },
+                child: const Text('Lưu'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (saved == true) {
+      await _save();
+      _snack('Đã lưu ca.');
+    }
   }
 
   // --- Nhân viên (chỉ chủ) ---
   Future<void> _editEmployee(Employee emp) async {
     final nameCtrl = TextEditingController(text: emp.name);
     final rateCtrl = TextEditingController(text: emp.rate.toString());
+    final leaveCtrl = TextEditingController(
+        text: emp.annualLeaveAllowance.toString());
     final ok = await showCupertinoDialog<bool>(
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
@@ -274,6 +444,11 @@ class _HomePageState extends State<HomePage> {
           CupertinoTextField(
               controller: rateCtrl,
               placeholder: 'Đơn giá/giờ (vd 160)',
+              keyboardType: TextInputType.number),
+          const SizedBox(height: 8),
+          CupertinoTextField(
+              controller: leaveCtrl,
+              placeholder: 'Ngày phép năm (vd 10)',
               keyboardType: TextInputType.number),
         ]),
         actions: [
@@ -289,6 +464,7 @@ class _HomePageState extends State<HomePage> {
     );
     if (ok != true) return;
     final rate = int.tryParse(rateCtrl.text.trim());
+    final leave = int.tryParse(leaveCtrl.text.trim()) ?? emp.annualLeaveAllowance;
     if (nameCtrl.text.trim().isEmpty || rate == null) {
       _snack('Tên hoặc giá giờ không hợp lệ.');
       return;
@@ -296,6 +472,7 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       emp.name = nameCtrl.text.trim();
       emp.rate = rate;
+      emp.annualLeaveAllowance = leave;
       _employee = emp.name;
     });
     await _save();
@@ -380,6 +557,67 @@ class _HomePageState extends State<HomePage> {
       await OpenFilex.open(file.path);
     } catch (e) {
       _snack('Xuất PDF lỗi: $e');
+    }
+  }
+
+  // --- Sao lưu / khôi phục JSON (giống app iOS) ---
+  Future<void> _exportBackup() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final now = DateTime.now();
+      final name =
+          'Gio-Lam-backup-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.json';
+      final file = File('${dir.path}/$name');
+      await file.writeAsString(
+          const JsonEncoder.withIndent('  ').convert(_s.data.toJson()));
+      _snack('Đã xuất sao lưu: ${file.path}');
+      await OpenFilex.open(file.path);
+    } catch (e) {
+      _snack('Xuất sao lưu lỗi: $e');
+    }
+  }
+
+  Future<void> _importBackup() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        dialogTitle: 'Chọn file sao lưu Gio-Lam (.json)',
+      );
+      final path = result?.files.single.path;
+      if (path == null) return;
+      final restored =
+          AppData.fromJson(jsonDecode(await File(path).readAsString()));
+      final ok = await showCupertinoDialog<bool>(
+        context: context,
+        builder: (ctx) => CupertinoAlertDialog(
+          title: const Text('Khôi phục dữ liệu?'),
+          content: Text(
+              'Toàn bộ dữ liệu hiện tại sẽ bị thay thế bằng file sao lưu '
+              '(cửa hàng ${restored.storeName}, ${restored.employees.length} nhân viên).'),
+          actions: [
+            CupertinoDialogAction(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Hủy')),
+            CupertinoDialogAction(
+                isDestructiveAction: true,
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Khôi phục')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      _s.data = restored;
+      await _save();
+      setState(() {
+        _employee = _s.data.employees.isNotEmpty
+            ? _s.data.employees.first.name
+            : null;
+        _tab = 0;
+      });
+      _snack('Đã khôi phục dữ liệu từ file sao lưu.');
+    } catch (e) {
+      _snack('Khôi phục lỗi: file không đúng định dạng sao lưu Gio-Lam. ($e)');
     }
   }
 
@@ -877,8 +1115,30 @@ class _HomePageState extends State<HomePage> {
             ]),
           ),
           const SizedBox(height: 20),
-          _sectionTitle('Dữ liệu trong báo cáo'),
+          Row(children: [
+            Expanded(child: _sectionTitle('Dữ liệu trong báo cáo')),
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: emp == null
+                  ? null
+                  : () => _showEntryEditor(),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(CupertinoIcons.plus_circle_fill, size: 16),
+                SizedBox(width: 4),
+                Text('Thêm ngày', style: TextStyle(fontSize: 14)),
+              ]),
+            ),
+          ]),
           const SizedBox(height: 8),
+          if (emp != null && emp.annualLeaveAllowance > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Nghỉ phép năm ${_month.year}: đã dùng ${_s.data.yearPaidLeaveUsed(emp.name, _month.year)} / ${emp.annualLeaveAllowance} ngày, còn lại ${emp.annualLeaveAllowance - _s.data.yearPaidLeaveUsed(emp.name, _month.year)} ngày.',
+                style: const TextStyle(color: _muted, fontSize: 13),
+              ),
+            ),
           if (rows.isEmpty)
             _card(const Padding(
               padding: EdgeInsets.all(16),
@@ -1054,6 +1314,77 @@ class _HomePageState extends State<HomePage> {
             ]),
           ),
           const SizedBox(height: 20),
+          _sectionTitle('Lương'),
+          const SizedBox(height: 8),
+          _card(
+            Column(children: [
+              Row(children: [
+                const Icon(CupertinoIcons.money_dollar_circle_fill,
+                    size: 20, color: _muted),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text('Loại tiền',
+                      style: TextStyle(fontSize: 15, color: _ink)),
+                ),
+                CupertinoSegmentedControl<String>(
+                  groupValue: data.currency,
+                  onValueChanged: (v) async {
+                    setState(() => data.currency = v);
+                    await _save();
+                  },
+                  children: const {
+                    'Kč': Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('Kč')),
+                    'đ': Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('đ')),
+                  },
+                ),
+              ]),
+              const SizedBox(height: 8),
+              const Text(
+                'Đơn giá theo giờ của từng nhân viên sửa ở mục Nhân viên bên trên. Tiền công hiện theo loại tiền này.',
+                style: TextStyle(color: _muted, fontSize: 12),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 20),
+          _sectionTitle('Sao lưu dữ liệu'),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _line),
+            ),
+            child: Column(children: [
+              ListTile(
+                leading: const Icon(
+                    CupertinoIcons.square_arrow_up_on_square_fill,
+                    color: _muted),
+                title: const Text('Xuất sao lưu (.json)'),
+                subtitle: const Text(
+                    'Lưu toàn bộ dữ liệu + cài đặt ra file JSON'),
+                trailing: const Icon(CupertinoIcons.chevron_right,
+                    size: 16, color: _muted),
+                onTap: _exportBackup,
+              ),
+              const Divider(height: 1, color: _line),
+              ListTile(
+                leading: const Icon(
+                    CupertinoIcons.square_arrow_down_on_square_fill,
+                    color: _muted),
+                title: const Text('Khôi phục từ file'),
+                subtitle: const Text(
+                    'Thay thế dữ liệu hiện tại bằng file sao lưu'),
+                trailing: const Icon(CupertinoIcons.chevron_right,
+                    size: 16, color: _muted),
+                onTap: _importBackup,
+              ),
+            ]),
+          ),
+          const SizedBox(height: 20),
           _sectionTitle('Chủ cửa hàng'),
           const SizedBox(height: 8),
           Container(
@@ -1142,7 +1473,9 @@ class _HomePageState extends State<HomePage> {
       ),
       title: Text(e.name,
           style: const TextStyle(fontWeight: FontWeight.w600, color: _ink)),
-      subtitle: Text('${e.rate}/giờ',
+      subtitle: Text(
+          '${e.rate} ${_s.data.currency}/giờ'
+          '${e.annualLeaveAllowance > 0 ? ' · phép còn ${e.annualLeaveAllowance - _s.data.yearPaidLeaveUsed(e.name, DateTime.now().year)} ngày' : ''}',
           style: const TextStyle(color: _muted, fontSize: 13)),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         IconButton(
@@ -1158,14 +1491,21 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _shiftRow(Shift s) {
-    final d = DateTime.parse(s.date);
+  String _shiftSubtitle(Shift s) {
     final notes = <String>[];
+    if (s.status != 'work') notes.add(shiftStatusTitle(s.status));
     if (s.inManual) notes.add('vào: nhập tay');
     if (s.outManual) notes.add('ra: nhập tay');
-    if (s.clockOut == null) notes.add('chưa tan ca');
+    if (s.clockOut == null && s.status == 'work') notes.add('chưa tan ca');
+    if (s.breakMinutes > 0) notes.add('nghỉ ${s.breakMinutes}p');
+    if (s.note.isNotEmpty) notes.add(s.note);
+    return notes.isEmpty ? 'Ca làm bình thường' : notes.join(' · ');
+  }
+
+  Widget _shiftRow(Shift s) {
+    final d = DateTime.parse(s.date);
     return InkWell(
-      onTap: () => _editShift(s),
+      onTap: () => _showEntryEditor(shift: s),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(children: [
@@ -1196,19 +1536,21 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 2),
               Text(
-                notes.isEmpty ? 'Ca làm bình thường' : notes.join(' · '),
+                _shiftSubtitle(s),
                 style: const TextStyle(color: _muted, fontSize: 12),
               ),
             ]),
           ),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(
-              '${s.clockIn == null ? '--:--' : fmtHhmm(s.clockIn!)} – ${s.clockOut == null ? '--:--' : fmtHhmm(s.clockOut!)}',
+              s.status == 'work'
+                  ? '${s.clockIn == null ? '--:--' : fmtHhmm(s.clockIn!)} – ${s.clockOut == null ? '--:--' : fmtHhmm(s.clockOut!)}'
+                  : shiftStatusTitle(s.status),
               style: const TextStyle(
                   fontWeight: FontWeight.w600, color: _ink, fontSize: 13),
             ),
             const SizedBox(height: 2),
-            Text(fmtDuration(s.total),
+            Text(s.status == 'work' ? fmtDuration(s.total) : '—',
                 style: const TextStyle(color: _accentDark, fontSize: 13)),
           ]),
         ]),

@@ -1,0 +1,22 @@
+name: gio_lam
+description: "Mini app cham cong Gio-Lam bang Flutter (Windows): bam gio, nhap tay trong ngay, ca dem 20h-05h."
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  path_provider: ^2.1.5
+  crypto: ^3.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

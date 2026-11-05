@@ -488,12 +488,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   // --- Sửa/thêm từng ngày (EntryEditor kiểu iOS) ---
-  // Ngày hôm nay ai cũng sửa được; ngày đã qua chỉ chủ cửa hàng mới sửa.
+  // Ngày hôm nay ai cũng sửa được; ca qua đêm kết thúc hôm nay cũng
+  // sửa được trong buổi sáng hôm đó; ngày khác chỉ chủ mới sửa.
   Future<void> _showEntryEditor({Shift? shift, String? date}) async {
     final emp = _s.data.employees.where((e) => e.name == _employee).firstOrNull;
     if (emp == null) return;
     final day = shift?.date ?? date ?? _todayStr;
-    if (day != _todayStr && !_ownerMode) {
+    final editable = shift != null
+        ? canEmployeeEditShift(shift.date, shift.clockIn, shift.clockOut)
+        : day == _todayStr;
+    if (!editable && !_ownerMode) {
       _snack('Ngày đã qua chỉ chủ cửa hàng mới sửa được. Nhấn Ctrl+H rồi nhập mật khẩu chủ.');
       return;
     }
@@ -1542,7 +1546,7 @@ class _HomePageState extends State<HomePage> {
             ),
           const SizedBox(height: 12),
           const Text(
-            'Bấm vào ca trong danh sách để sửa (chỉ chủ cửa hàng mới sửa được ngày đã qua).',
+            'Bấm vào ca trong danh sách để sửa (ngày đã qua chỉ chủ cửa hàng mới sửa được, trừ ca qua đêm vừa kết thúc sáng nay).',
             style: TextStyle(color: _muted, fontSize: 12),
           ),
         ]),

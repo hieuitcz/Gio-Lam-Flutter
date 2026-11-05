@@ -168,5 +168,33 @@ void main() {
     expect(store.data.employees.first.name, 'Hieu');
   });
 
+  test('vao/ra cung phut = 0 phut, khong phai 24h', () {
+    expect(durationMinutes(24, 24), 0);
+    expect(durationMinutes(0, 0), 0);
+    expect(durationMinutes(9 * 60, 9 * 60), 0);
+    // Ca dem van dung: 20:00 -> 05:00 = 9h00.
+    expect(durationMinutes(20 * 60, 5 * 60), 540);
+  });
+
+  test('ca qua dem nhan vien sua duoc vao sang hom ket thuc', () {
+    final now = DateTime(2026, 11, 6, 8, 0); // sang 6/11
+    // Ca 20:00 ngay 5/11 -> 05:00 ngay 6/11: sua duoc sang 6/11.
+    expect(canEmployeeEditShift('2026-11-05', 20 * 60, 5 * 60, now: now),
+        isTrue);
+    expect(shiftEndDateStr('2026-11-05', 20 * 60, 5 * 60), '2026-11-06');
+    // Sang 7/11 thi het han: chi chu moi sua duoc.
+    expect(
+        canEmployeeEditShift('2026-11-05', 20 * 60, 5 * 60,
+            now: DateTime(2026, 11, 7, 8, 0)),
+        isFalse);
+    // Ca thuong ngay hom qua: khong sua duoc.
+    expect(
+        canEmployeeEditShift('2026-11-05', 9 * 60, 17 * 60, now: now),
+        isFalse);
+    // Ca hom nay: sua duoc.
+    expect(
+        canEmployeeEditShift('2026-11-06', 9 * 60, 17 * 60, now: now),
+        isTrue);
+  });
 
 }

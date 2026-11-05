@@ -251,84 +251,267 @@ class _HomePageState extends State<HomePage> {
     ]);
   }
 
+  // Popup Giới thiệu kiểu iOS: Dialog bo 28, căn giữa cân đối như sheet
+  // EntryEditor (không dùng CupertinoAlertDialog hẹp, 4 nút xếp chồng).
   Future<void> _showAboutDialog() async {
-    await showCupertinoDialog(
+    await showDialog(
       context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('Chấm công by Hiếu Lê'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 8),
-            _developerHeader(),
-            const SizedBox(height: 4),
-            ..._aboutContactRows(),
-            const SizedBox(height: 8),
-            _versionRow(),
-          ],
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.white,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Thanh kéo như sheet iOS.
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  // Logo app + tên + phiên bản, căn giữa.
+                  Center(
+                    child: Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        gradient: iosBrandGradient,
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: [
+                          BoxShadow(
+                            color: iosIndigo.withValues(alpha: 0.25),
+                            blurRadius: 12,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.access_time_filled,
+                          color: Colors.white, size: 32),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('Chấm công by Hiếu Lê',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: _ink)),
+                  const SizedBox(height: 4),
+                  const Text('Chấm công $_appVersion',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 13, color: _muted)),
+                  const SizedBox(height: 18),
+                  // Thẻ tác giả + liên hệ nền xám, các hàng ngăn bằng kẻ mờ.
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: _bg,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 8),
+                        _developerHeader(),
+                        const SizedBox(height: 6),
+                        ..._aboutContactRowsSeparated(),
+                        const SizedBox(height: 2),
+                        const Divider(height: 1, color: _line),
+                        const SizedBox(height: 10),
+                        _versionRow(),
+                        const SizedBox(height: 10),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  PrimaryButton(
+                    label: 'Hướng dẫn sử dụng',
+                    icon: Icons.menu_book,
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _showGuideDialog();
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(
+                      child: TintedButton(
+                        label: 'Kiểm tra bản cập nhật',
+                        icon: Icons.system_update,
+                        tint: iosIndigo,
+                        onPressed: () => launchUrl(Uri.parse(_supportUrl),
+                            mode: LaunchMode.externalApplication),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TintedButton(
+                        label: 'Báo lỗi / Góp ý',
+                        icon: Icons.chat_bubble,
+                        tint: iosIndigo,
+                        onPressed: () => launchUrl(Uri.parse(_supportUrl),
+                            mode: LaunchMode.externalApplication),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 6),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Đóng',
+                        style: TextStyle(
+                            color: _muted, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _showGuideDialog();
-            },
-            child: const Text('Hướng dẫn sử dụng'),
-          ),
-          CupertinoDialogAction(
-            onPressed: () => launchUrl(Uri.parse(_supportUrl),
-                mode: LaunchMode.externalApplication),
-            child: const Text('Kiểm tra bản cập nhật'),
-          ),
-          CupertinoDialogAction(
-            onPressed: () => launchUrl(Uri.parse(_supportUrl),
-                mode: LaunchMode.externalApplication),
-            child: const Text('Báo lỗi / Góp ý'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Đóng'),
-          ),
-        ],
       ),
     );
   }
 
+  // Các hàng liên hệ ngăn nhau bằng kẻ mờ (kiểu list iOS).
+  List<Widget> _aboutContactRowsSeparated() {
+    final rows = _aboutContactRows();
+    final out = <Widget>[];
+    for (var i = 0; i < rows.length; i++) {
+      out.add(rows[i]);
+      if (i < rows.length - 1) {
+        out.add(const Divider(height: 1, color: _line));
+      }
+    }
+    return out;
+  }
+
+  // Popup Hướng dẫn kiểu iOS: tiêu đề căn giữa, nội dung chia mục có
+  // icon + gạch đầu dòng, nút Đóng gradient toàn chiều rộng.
   Future<void> _showGuideDialog() async {
     await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => Dialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28)),
-        title: const Text('Hướng dẫn sử dụng',
-            style: TextStyle(
-                fontSize: 20, fontWeight: FontWeight.bold, color: _ink)),
-        content: const SingleChildScrollView(
-          child: Text(
-            'Chấm công\n'
-            '• Đến làm: chọn tên mình rồi bấm Vào ca.\n'
-            '• Về: bấm Tan ca. Quên bấm thì nhập tay giờ ra trong ngày.\n'
-            '• Chạy đi cửa hàng khác rồi quay lại: tan ca rồi bấm Vào ca lại, 1 ngày chấm được nhiều lần.\n'
-            '• Ca đêm (vd 20:00–05:00) được tính vào ngày bắt đầu ca.\n\n'
-            'Báo cáo\n'
-            '• Xem tổng giờ, tăng ca, tiền công theo tháng; bấm vào 1 ngày để sửa.\n'
-            '• Nút Xuất PDF để lưu bảng chấm công tháng.',
-            style: TextStyle(fontSize: 14, height: 1.5),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('Hướng dẫn sử dụng',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: _ink)),
+                  const SizedBox(height: 18),
+                  _guideSection(
+                    icon: Icons.access_time_filled,
+                    tint: iosIndigo,
+                    title: 'Chấm công',
+                    bullets: const [
+                      'Đến làm: chọn tên mình rồi bấm Vào ca.',
+                      'Về: bấm Tan ca. Quên bấm thì nhập tay giờ ra trong ngày.',
+                      'Chạy đi cửa hàng khác rồi quay lại: tan ca rồi bấm Vào ca lại, 1 ngày chấm được nhiều lần.',
+                      'Ca đêm (vd 20:00–05:00) được tính vào ngày bắt đầu ca.',
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  _guideSection(
+                    icon: Icons.description,
+                    tint: _teal,
+                    title: 'Báo cáo',
+                    bullets: const [
+                      'Xem tổng giờ, tăng ca, tiền công theo tháng; bấm vào 1 ngày để sửa.',
+                      'Nút Xuất PDF để lưu bảng chấm công tháng.',
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  PrimaryButton(
+                    label: 'Đã hiểu',
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
-        actionsPadding: const EdgeInsets.only(right: 12, bottom: 8),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Đóng',
-                style: TextStyle(
-                    color: _accent, fontWeight: FontWeight.w600)),
-          ),
-        ],
       ),
+    );
+  }
+
+  // Một mục trong hướng dẫn: tiêu đề có icon + các dòng gạch đầu dòng.
+  Widget _guideSection({
+    required IconData icon,
+    required Color tint,
+    required String title,
+    required List<String> bullets,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          IconTile(icon: icon, tint: tint),
+          const SizedBox(width: 10),
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: _ink)),
+        ]),
+        const SizedBox(height: 10),
+        for (final b in bullets) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                margin: const EdgeInsets.only(top: 7, left: 6, right: 10),
+                decoration:
+                    BoxDecoration(color: tint, shape: BoxShape.circle),
+              ),
+              Expanded(
+                child: Text(b,
+                    style: const TextStyle(
+                        fontSize: 15, height: 1.5, color: _ink)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
     );
   }
 

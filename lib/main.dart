@@ -43,7 +43,7 @@ void main() async {
     minimumSize: Size(520, 720),
     maximumSize: Size(900, 1150),
     center: true,
-    title: 'Gio-Lam — Chấm công',
+    title: 'Chấm công by Hiếu Lê',
   );
   windowManager.waitUntilReadyToShow(options, () async {
     await windowManager.show();
@@ -80,7 +80,7 @@ class GioLamApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Gio-Lam — Chấm công',
+      title: 'Chấm công by Hiếu Lê',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorSchemeSeed: _accent,
@@ -139,7 +139,7 @@ class _HomePageState extends State<HomePage> {
     await showCupertinoDialog(
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('Gio-Lam — Chấm công'),
+        title: const Text('Chấm công by Hiếu Lê'),
         content: const Column(
           mainAxisSize: MainAxisSize.min,
           children: [

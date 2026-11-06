@@ -1,0 +1,36 @@
+// Đồng bộ cloud Gio-Lam (project gio-lam).
+// Dán vào Firebase Console > Firestore Database > Rules rồi bấm Publish.
+//
+// - Chỉ tài khoản đã đăng nhập mới đọc/ghi.
+// - Doc users/{uid} do admin tạo trong Console (xem mục "Đồng bộ cloud
+//   (Firebase)" trong README.md), chỉ chính chủ mới đọc, không ai ghi
+//   được từ app (ghi từ Console).
+// - Doc stores/{storeId}: được đọc/ghi khi users/{uid}.storeId trùng
+//   với storeId, hoặc bằng '*' (chủ cửa hàng/admin xem được hết).
+// - Chưa có doc users/{uid} thì tài khoản đó không đọc/ghi được gì
+//   trên cloud (app vẫn chạy offline bình thường) — admin phải tạo
+//   doc users/{uid} cho tài khoản đó trước.
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function canAccess(storeId) {
+      return request.auth != null &&
+          (userDoc().data.storeId == storeId ||
+              userDoc().data.storeId == '*');
+    }
+
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /stores/{storeId} {
+      allow read, write: if canAccess(storeId);
+    }
+  }
+}

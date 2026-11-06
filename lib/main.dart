@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'cloud_sync.dart';
 import 'ios_theme.dart';
 import 'logic.dart';
 import 'report_pdf.dart';
@@ -59,17 +60,25 @@ void main() async {
   final supportDir = await getApplicationSupportDirectory();
   final dataFile = File('${supportDir.path}/gio-lam.json');
   if (!await dataFile.exists()) {
-    final oldFile =
-        File('${(await getApplicationDocumentsDirectory()).path}/gio-lam.json');
-    if (await oldFile.exists()) {
-      try {
-        await oldFile.copy(dataFile.path);
-        await oldFile.rename('${oldFile.path}.cu');
-      } catch (_) {}
-    }
+    // Bọc cả bước chuyển file cũ: nếu không lấy được thư mục
+    // Documents trên máy này thì bỏ qua, app vẫn mở bình thường
+    // với dữ liệu mới (không được crash lúc khởi động).
+    try {
+      final oldFile = File(
+          '${(await getApplicationDocumentsDirectory()).path}/gio-lam.json');
+      if (await oldFile.exists()) {
+        try {
+          await oldFile.copy(dataFile.path);
+          await oldFile.rename('${oldFile.path}.cu');
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
   final store = DataStore(dataFile);
   await store.load();
+  // Khởi tạo Firebase (đồng bộ cloud). Lỗi (không mạng/chưa cấu hình)
+  // thì app vẫn chạy hoàn toàn offline bằng JSON local, không crash.
+  await cloudSync.initFirebase();
   runApp(GioLamApp(store: store));
 }
 
@@ -151,6 +160,13 @@ class _HomePageState extends State<HomePage>
   String? _lastPdfPath;
   // Điều khiển hiệu ứng nhấp nháy của nút ⓘ hỗ trợ.
   late final AnimationController _pulseCtrl;
+  // Đồng bộ cloud: true = đang hiện màn hình đăng nhập Firebase
+  // (chưa có tài khoản đăng nhập). false = vào app bình thường.
+  bool _showCloudLogin = false;
+  // Đang đăng nhập / đổi cửa hàng trên cloud (khóa nút lúc chờ).
+  bool _cloudBusy = false;
+  final _cloudEmailCtrl = TextEditingController();
+  final _cloudPwCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -162,6 +178,10 @@ class _HomePageState extends State<HomePage>
         ? widget.store.data.employees.first.name
         : null;
     _tick();
+    // Đồng bộ cloud (nếu Firebase khởi tạo được): đăng nhập rồi thì
+    // tải quyền + dữ liệu mới nhất về, chưa đăng nhập thì hiện màn
+    // hình đăng nhập. Firebase lỗi thì bỏ qua, chạy offline.
+    _cloudInit();
     // Báo cho chủ biết nếu file dữ liệu đã bị sửa bên ngoài.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final status = _s.tamperStatus;
@@ -183,6 +203,8 @@ class _HomePageState extends State<HomePage>
   @override
   void dispose() {
     _pulseCtrl.dispose();
+    _cloudEmailCtrl.dispose();
+    _cloudPwCtrl.dispose();
     super.dispose();
   }
 
@@ -652,6 +674,9 @@ class _HomePageState extends State<HomePage>
   Future<void> _save() async {
     await _s.save();
     setState(() {});
+    // Đẩy lên cloud (nếu đã đăng nhập). Chạy nền, không chờ: mất mạng
+    // hay lỗi thì lần lưu sau tự đẩy lại, không chặn người dùng.
+    unawaited(cloudSync.uploadBestEffort(_s));
   }
 
   void _snack(String msg) =>
@@ -667,6 +692,273 @@ class _HomePageState extends State<HomePage>
     } catch (e) {
       _snack('Lỗi: $e');
     }
+  }
+
+  // --- Đồng bộ cloud (Firebase) ---------------------------------------
+  // Chạy lúc mở app: Firebase chưa khởi tạo được thì bỏ qua, chạy
+  // offline hoàn toàn; chưa đăng nhập thì hiện màn hình đăng nhập.
+  Future<void> _cloudInit() async {
+    if (!cloudSync.firebaseReady) return;
+    if (!cloudSync.signedIn) {
+      if (mounted) setState(() => _showCloudLogin = true);
+      return;
+    }
+    await _afterCloudSignIn();
+  }
+
+  // Sau khi đăng nhập cloud (lúc mở app hoặc đăng nhập tay): tải quyền
+  // xem (users/{uid}), xử lý máy cửa hàng giữ sai cửa hàng, liệt kê
+  // các cửa hàng, rồi đồng bộ dữ liệu mới nhất về.
+  Future<void> _afterCloudSignIn() async {
+    await cloudSync.loadUserProfile(_s.data.storeName);
+    // Tài khoản cửa hàng: máy chỉ được giữ đúng cửa hàng của tài khoản.
+    if (cloudSync.cloudRole == 'store' &&
+        cloudSync.cloudStoreId != null &&
+        cloudSync.cloudStoreId != '*' &&
+        cloudSync.cloudStoreId != _s.data.storeName) {
+      final target = cloudSync.cloudStoreId!;
+      final isEmptySeed = _s.data.ownerHash == null &&
+          _s.data.shifts.values.every((l) => l.isEmpty);
+      if (isEmptySeed) {
+        // Máy mới chưa có dữ liệu thật: đổi tên cửa hàng local theo
+        // tài khoản rồi đẩy lên cloud làm dữ liệu ban đầu.
+        _s.data.storeName = target;
+        await cloudSync.uploadBestEffort(_s);
+      } else {
+        final ok = await cloudSync.switchStore(_s, target);
+        if (!ok && mounted) {
+          _snack(
+              'Tài khoản này là của cửa hàng $target, máy đang giữ dữ liệu cửa hàng ${_s.data.storeName}. Nhờ admin kiểm tra.');
+        }
+      }
+    }
+    await cloudSync.fetchStoreIds();
+    final changed = await cloudSync.syncOnStartup(_s);
+    if (!mounted) return;
+    setState(() {
+      if (changed) {
+        _employee = _s.data.employees.isNotEmpty
+            ? _s.data.employees.first.name
+            : null;
+      }
+    });
+    if (changed) _snack('Đã đồng bộ dữ liệu mới nhất từ cloud.');
+  }
+
+  // Đăng nhập cloud bằng email/mật khẩu (tài khoản admin tạo trong
+  // Firebase Console). Sai mật khẩu/mất mạng thì báo lỗi, không kẹt.
+  Future<void> _cloudLogin() async {
+    final email = _cloudEmailCtrl.text.trim();
+    final pw = _cloudPwCtrl.text;
+    if (email.isEmpty || pw.isEmpty) {
+      _snack('Nhập email và mật khẩu đồng bộ.');
+      return;
+    }
+    setState(() => _cloudBusy = true);
+    try {
+      await cloudSync.signIn(email, pw);
+      await _afterCloudSignIn();
+      if (!mounted) return;
+      setState(() {
+        _showCloudLogin = false;
+        _cloudBusy = false;
+      });
+      _snack('Đã đăng nhập đồng bộ (${cloudSync.currentEmail}).');
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      _snack('Đăng nhập lỗi: kiểm tra lại email/mật khẩu hoặc mạng.');
+    }
+  }
+
+  // Đăng xuất cloud (Cài đặt, chỉ chủ/admin): về màn hình đăng nhập.
+  // Dữ liệu local trên máy vẫn giữ nguyên, chỉ là không đồng bộ nữa.
+  Future<void> _cloudSignOut() async {
+    await cloudSync.signOut();
+    setState(() {
+      _showCloudLogin = true;
+      _role = 'employee';
+      _tab = 0;
+    });
+  }
+
+  // Nút "Đồng bộ ngay" trong Cài đặt: tải về nếu cloud mới hơn,
+  // không thì đẩy local lên.
+  Future<void> _syncNow() async {
+    if (!cloudSync.available) {
+      _snack('Chưa đăng nhập đồng bộ.');
+      return;
+    }
+    setState(() => _cloudBusy = true);
+    final changed = await cloudSync.syncNow(_s);
+    if (!mounted) return;
+    setState(() {
+      _cloudBusy = false;
+      if (changed) {
+        _employee = _s.data.employees.isNotEmpty
+            ? _s.data.employees.first.name
+            : null;
+      }
+    });
+    _snack(changed
+        ? 'Đã tải dữ liệu mới nhất từ cloud.'
+        : 'Đã đồng bộ xong (dữ liệu local đã đẩy lên cloud).');
+  }
+
+  // Đổi sang xem cửa hàng khác (chỉ chủ/admin, có ô chọn ở đầu tab
+  // Chấm công). Đẩy dữ liệu cửa hàng hiện tại lên trước rồi mới tải
+  // cửa hàng mới về; mất mạng thì chặn đổi.
+  Future<void> _switchStore(String storeId) async {
+    if (storeId == _s.data.storeName || _cloudBusy) return;
+    setState(() => _cloudBusy = true);
+    final ok = await cloudSync.switchStore(_s, storeId);
+    if (!mounted) return;
+    setState(() => _cloudBusy = false);
+    if (!ok) {
+      _snack('Mất mạng, không đổi được cửa hàng.');
+      return;
+    }
+    setState(() {
+      _employee = _s.data.employees.isNotEmpty
+          ? _s.data.employees.first.name
+          : null;
+    });
+    _snack('Đang xem cửa hàng $storeId.');
+  }
+
+  // Màn hình đăng nhập đồng bộ: hiện khi Firebase khởi tạo được mà
+  // chưa có tài khoản đăng nhập. Có nút "Dùng offline" để máy chưa
+  // có tài khoản vẫn dùng được bình thường (lần mở sau hỏi lại).
+  Widget _cloudLoginScreen() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    gradient: iosBrandGradient,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: const Icon(Icons.access_time_filled,
+                      color: Colors.white, size: 32),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('Đăng nhập đồng bộ',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: _ink)),
+              const SizedBox(height: 8),
+              const Text(
+                'Nhập tài khoản đồng bộ do admin tạo trong Firebase Console (1 tài khoản cho mỗi cửa hàng; tài khoản admin xem được hết các cửa hàng). Mất mạng vẫn dùng được offline.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: _muted, fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+              CupertinoTextField(
+                controller: _cloudEmailCtrl,
+                placeholder: 'Email đồng bộ',
+                keyboardType: TextInputType.emailAddress,
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              const SizedBox(height: 12),
+              CupertinoTextField(
+                controller: _cloudPwCtrl,
+                placeholder: 'Mật khẩu',
+                obscureText: true,
+                onSubmitted: (_) => _cloudLogin(),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              const SizedBox(height: 20),
+              PrimaryButton(
+                label: _cloudBusy ? 'Đang đăng nhập…' : 'Đăng nhập',
+                onPressed: _cloudBusy ? null : _cloudLogin,
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _cloudBusy
+                    ? null
+                    : () => setState(() => _showCloudLogin = false),
+                child: const Text('Dùng offline (không đồng bộ)',
+                    style: TextStyle(
+                        color: _muted, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Ô chọn cửa hàng ở đầu tab Chấm công: chỉ tài khoản cloud là chủ
+  // cửa hàng (quản lý) hoặc admin tổng mới thấy; tài khoản cửa hàng
+  // chỉ xem cửa hàng của mình nên không có ô chọn.
+  Widget _storePicker() {
+    if (!cloudSync.canPickStore || cloudSync.storeIds.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final items = {...cloudSync.storeIds, _s.data.storeName}.toList()
+      ..sort();
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(children: [
+        const Icon(Icons.store, size: 16, color: _muted),
+        const SizedBox(width: 8),
+        const Text('Cửa hàng',
+            style: TextStyle(
+                color: _muted,
+                fontSize: 14,
+                fontWeight: FontWeight.w600)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _line)),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: items.contains(_s.data.storeName)
+                    ? _s.data.storeName
+                    : null,
+                isExpanded: true,
+                items: items
+                    .map((id) => DropdownMenuItem(
+                        value: id,
+                        child: Text(id,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, color: _ink))))
+                    .toList(),
+                onChanged: _cloudBusy
+                    ? null
+                    : (v) {
+                        if (v != null) _switchStore(v);
+                      },
+              ),
+            ),
+          ),
+        ),
+      ]),
+    );
   }
 
   // --- Hỏi giờ / mật khẩu (dialog iOS) ---
@@ -1430,6 +1722,11 @@ class _HomePageState extends State<HomePage>
 
   @override
   Widget build(BuildContext context) {
+    // Chưa đăng nhập đồng bộ (Firebase bật mà chưa có tài khoản):
+    // hiện màn hình đăng nhập thay cho các tab.
+    if (_showCloudLogin) {
+      return Scaffold(body: SafeArea(child: _cloudLoginScreen()));
+    }
     final items = <BottomNavigationBarItem>[
       const BottomNavigationBarItem(
           icon: Icon(Icons.access_time_filled), label: 'Chấm công'),
@@ -1521,6 +1818,7 @@ class _HomePageState extends State<HomePage>
               ],
               _pulsingInfoButton(),
             ]),
+            _storePicker(),
             const SizedBox(height: 14),
             const Text('Chấm công',
                 style: TextStyle(
@@ -2191,6 +2489,59 @@ class _HomePageState extends State<HomePage>
                     size: 16, color: _muted),
                 onTap: _importBackup,
               ),
+            ]),
+          ),
+          const SizedBox(height: 20),
+          const AppSectionHeader(icon: Icons.cloud, title: 'Đồng bộ cloud'),
+          const SizedBox(height: 8),
+          AppCard(
+            padding: EdgeInsets.zero,
+            child: Column(children: [
+              ListTile(
+                leading: const IconTile(icon: Icons.cloud, tint: _accent),
+                title: Text(cloudSync.signedIn
+                    ? 'Đã đăng nhập: ${cloudSync.currentEmail}'
+                    : cloudSync.firebaseReady
+                        ? 'Chưa đăng nhập đồng bộ'
+                        : 'Chưa bật đồng bộ (mất mạng hoặc chưa cấu hình)'),
+                subtitle: Text(cloudSync.signedIn
+                    ? 'Quyền: ${cloudSync.cloudRole ?? 'store'} · ${cloudSync.cloudStoreId == '*' ? 'xem được hết các cửa hàng' : 'cửa hàng ${cloudSync.cloudStoreId ?? _s.data.storeName}'}'
+                    : 'Dữ liệu vẫn lưu local trên máy, có mạng đăng nhập lại để đồng bộ.'),
+              ),
+              if (cloudSync.lastSyncTime != null) ...[
+                const Divider(height: 1, color: _line),
+                ListTile(
+                  leading:
+                      const IconTile(icon: Icons.sync, tint: _teal),
+                  title: const Text('Đồng bộ lần cuối'),
+                  subtitle: Text(
+                      '${cloudSync.lastSyncTime!.day}/${cloudSync.lastSyncTime!.month}/${cloudSync.lastSyncTime!.year} ${cloudSync.lastSyncTime!.hour.toString().padLeft(2, '0')}:${cloudSync.lastSyncTime!.minute.toString().padLeft(2, '0')}'),
+                ),
+              ],
+              const Divider(height: 1, color: _line),
+              ListTile(
+                leading: const IconTile(icon: Icons.sync, tint: _accent),
+                title: const Text('Đồng bộ ngay'),
+                subtitle: const Text(
+                    'Tải về nếu cloud mới hơn, không thì đẩy dữ liệu local lên'),
+                trailing: _cloudBusy
+                    ? const CupertinoActivityIndicator()
+                    : const Icon(Icons.chevron_right,
+                        size: 16, color: _muted),
+                onTap: _cloudBusy ? null : _syncNow,
+              ),
+              if (cloudSync.signedIn) ...[
+                const Divider(height: 1, color: _line),
+                ListTile(
+                  leading:
+                      const IconTile(icon: Icons.logout, tint: _danger),
+                  title: const Text('Đăng xuất đồng bộ',
+                      style: TextStyle(color: _danger)),
+                  subtitle: const Text(
+                      'Dữ liệu local trên máy vẫn giữ nguyên'),
+                  onTap: _cloudSignOut,
+                ),
+              ],
             ]),
           ),
           const SizedBox(height: 20),

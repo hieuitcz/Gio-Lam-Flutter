@@ -63,6 +63,46 @@ File chạy nằm ở `build\windows\x64\runner\Release\gio_lam.exe` — copy c�
 mục `Release` đi đâu cũng chạy được, đúp chuột là mở (không cần Python, không
 cần cmd).
 
+## Đồng bộ cloud (Firebase)
+
+App đồng bộ dữ liệu chấm công lên cloud để máy ở cửa hàng, máy chủ
+cửa hàng và máy admin tổng đều thấy số liệu mới nhất. Project Firebase
+là **gio-lam** (gói miễn phí Spark). Dữ liệu local (JSON + ký HMAC)
+vẫn là nguồn chính khi offline: mất mạng vẫn chấm công bình thường, có
+mạng lại tự đẩy lên; mở app thì tải bản mới nhất trên cloud về nếu có.
+
+- **Luật xem**: mỗi cửa hàng chỉ hiện cửa hàng của mình. Chủ cửa hàng
+  (quản lý) và admin tổng đăng nhập cloud xong thì có ô chọn cửa hàng
+  ở đầu tab Chấm công, xem được hết các cửa hàng.
+- **Cách đồng bộ**: mỗi cửa hàng là 1 doc trong collection `stores`
+  (doc id = tên cửa hàng, vd `Rybna`), chứa toàn bộ dữ liệu + mốc
+  `updatedAt`. Lưu local xong app tự đẩy lên cloud (chạy nền, lỗi mạng
+  thì lần sau đẩy lại). Mở app hoặc bấm "Đồng bộ ngay" trong Cài đặt:
+  tải về nếu bản cloud mới hơn mốc đã đồng bộ, không thì đẩy local lên.
+  Mốc đồng bộ lưu trong chính file JSON local (`cloudUpdatedAt`) nên
+  không tải đè lên giờ công nhập offline chưa kịp đẩy.
+
+### Admin làm 1 lần trên Firebase Console (console.firebase.google.com)
+
+1. **Firestore**: vào Build > Firestore Database, tạo database nếu chưa
+   có. Vào Firestore > Rules, dán toàn bộ file `firestore.rules` trong
+   repo này rồi bấm Publish.
+2. **Tài khoản đăng nhập**: vào Build > Authentication > Users > Add
+   user, tạo 1 tài khoản (email + mật khẩu) cho mỗi cửa hàng, cộng 1
+   tài khoản admin. Mật khẩu này là mật khẩu đăng nhập đồng bộ trên app,
+   khác với mật khẩu chủ / mật khẩu tổng bấm Ctrl+H trong app.
+3. **Quyền xem**: vào Firestore > Data, tạo collection `users`, thêm 1
+   doc cho mỗi tài khoản — doc id = UID của tài khoản đó (xem trong
+   Authentication > Users, bấm vào tài khoản để copy UID), field:
+   `storeId` (tên cửa hàng, vd `Rybna`; tài khoản admin/chủ xem hết thì
+   ghi `*`) và `role` (`store` cho máy cửa hàng, `owner` cho chủ cửa
+   hàng, `admin` cho admin tổng).
+4. Mỗi máy mở app lần đầu: nhập email + mật khẩu đồng bộ của máy đó.
+   Máy cửa hàng tự nhận đúng cửa hàng của tài khoản; máy admin/chủ thì
+   chọn cửa hàng ở ô phía trên tab Chấm công. Chưa có doc `users/{uid}`
+   thì tài khoản đó không đồng bộ được (app vẫn chạy offline) — admin
+   tạo doc xong thì đăng xuất rồi đăng nhập lại trên máy đó.
+
 ## Kiểm thử
 
 ```bat

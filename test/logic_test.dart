@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gio_lam/cloud_sync.dart';
 import 'package:gio_lam/logic.dart';
 import 'package:gio_lam/store.dart';
 
@@ -243,6 +244,23 @@ void main() {
     expect(
         canEmployeeEditShift('2026-11-06', 9 * 60, 17 * 60, now: now),
         isTrue);
+  });
+
+  test('dong bo cloud: moc cloudUpdatedAt luu/khoi phuc dung', () {
+    final data = AppData.seed();
+    expect(data.cloudUpdatedAt, 0);
+    expect(AppData.fromJson({}).cloudUpdatedAt, 0);
+    data.cloudUpdatedAt = 123456789;
+    final restored = AppData.fromJson(
+        jsonDecode(jsonEncode(data.toJson())) as Map<String, dynamic>);
+    expect(restored.cloudUpdatedAt, 123456789);
+  });
+
+  test('dong bo cloud: chi tai ban cloud moi hon moc local', () {
+    expect(shouldApplyRemote(200, 100), isTrue);
+    expect(shouldApplyRemote(100, 100), isFalse);
+    expect(shouldApplyRemote(50, 100), isFalse);
+    expect(shouldApplyRemote(1, 0), isTrue);
   });
 
 }

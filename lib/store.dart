@@ -102,7 +102,12 @@ class AppData {
   String fontFamily;
   // Ẩn tiền công với nhân viên (chỉ chủ/admin mới thấy tiền). Mặc định bật.
   bool hidePay;
-  AppData({required this.storeName, required this.employees, Map<String, List<Shift>>? shifts, this.ownerHash, this.standardMinutesPerDay = 480, this.currency = 'Kč', this.fontFamily = 'Lexend', this.hidePay = true})
+  // Mốc đồng bộ cloud gần nhất (millisecondsSinceEpoch của lần
+  // upload/download cuối). Lưu trong JSON đã ký để app nhớ được sau
+  // khi khởi động lại: chỉ tải dữ liệu cloud về khi bản cloud mới hơn
+  // mốc này, tránh ghi đè giờ công nhập offline chưa kịp đẩy lên.
+  int cloudUpdatedAt;
+  AppData({required this.storeName, required this.employees, Map<String, List<Shift>>? shifts, this.ownerHash, this.standardMinutesPerDay = 480, this.currency = 'Kč', this.fontFamily = 'Lexend', this.hidePay = true, this.cloudUpdatedAt = 0})
       : shifts = shifts ?? {};
 
   factory AppData.seed() => AppData(
@@ -119,6 +124,7 @@ class AppData {
         'currency': currency,
         'fontFamily': fontFamily,
         'hidePay': hidePay,
+        'cloudUpdatedAt': cloudUpdatedAt,
       };
 
   factory AppData.fromJson(Map<String, dynamic> j) => AppData(
@@ -134,6 +140,7 @@ class AppData {
         currency: j['currency'] as String? ?? 'Kč',
         fontFamily: j['fontFamily'] as String? ?? 'Lexend',
         hidePay: j['hidePay'] as bool? ?? true,
+        cloudUpdatedAt: (j['cloudUpdatedAt'] as num?)?.toInt() ?? 0,
       );
 
   /// Tất cả đoạn ca của 1 ngày (đã sắp theo giờ vào).

@@ -54,6 +54,11 @@ bool canEmployeeEditShift(String dateStr, int? clockIn, int? clockOut,
       shiftEndDateStr(dateStr, clockIn, clockOut) == today;
 }
 
+/// Nhân viên thêm ngày mới chỉ được thêm đúng hôm nay.
+bool canEmployeeAddShift(String dateStr, {DateTime? now}) {
+  return dateStr == _dateStr(now ?? DateTime.now());
+}
+
 /// Tách tên sheet/nhân viên dạng "Tên-ĐơnGiá" thành (tên, đơn giá).
 /// "Hieu-160" -> ("Hieu", 160); "110" -> ("110", 110); "Hieu" -> ("Hieu", null).
 (String, int?) parseEmployee(String title) {

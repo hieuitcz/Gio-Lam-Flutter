@@ -7,8 +7,24 @@ cmd vì máy không có Python/tkinter).
 
 App có 3 tab kiểu iOS ở thanh dưới cùng: **Chấm công** (bấm giờ trực tiếp,
 đồng hồ đếm giờ), **Báo cáo** (tổng hợp tháng + xuất PDF), **Cài đặt**
-— tab Cài đặt chỉ hiện khi chủ cửa hàng đăng nhập bằng mật khẩu (bấm nút
-khóa "Chủ cửa hàng" ở đầu tab Chấm công). Nhân viên không thấy nút Cài đặt.
+— tab Cài đặt chỉ hiện khi chủ cửa hàng hoặc admin đăng nhập bằng mật khẩu
+(Ctrl+H, không có nút hiện ra ngoài). Nhân viên không thấy tab Cài đặt.
+
+## Vai trò (nhân viên / chủ / admin)
+
+- **Nhân viên** (mặc định khi mở app, không cần PIN): chỉ thấy giờ làm của
+  mình (giờ vào/ra, tổng giờ, tăng ca). Không thấy tiền công, đơn giá giờ,
+  không thấy giờ của người khác. Xuất PDF được nhưng PDF của nhân viên bỏ
+  cột "Giờ công"/"Tăng ca" và phần tổng kết tiền công (khi đang bật ẩn tiền).
+- **Chủ cửa hàng** (tài khoản quản lý): thấy đầy đủ app — tất cả nhân viên,
+  tiền công, cài đặt, sửa ngày đã qua. Đổi được mật khẩu chủ của mình.
+- **Admin** (quyền cao nhất): đầy đủ như chủ, cộng thêm mục **Quản trị**
+  trong Cài đặt: đặt/đổi mật khẩu tổng, đặt lại mật khẩu chủ, công tắc
+  "Ẩn tiền công với nhân viên" (mặc định bật). Đăng nhập bằng mật khẩu tổng
+  (Ctrl+H) thì luôn vào được, kể cả khi mật khẩu chủ đã bị đổi. Mật khẩu
+  tổng lưu SHA-256 trong file riêng `gio-lam.json.master` bên cạnh file dữ
+  liệu, không nằm trong JSON đã ký nên khôi phục dữ liệu cũng không mất.
+  Huy hiệu "CHỦ" (indigo) / "ADMIN" (teal) hiện ở đầu tab Chấm công.
 
 ## Tính năng
 

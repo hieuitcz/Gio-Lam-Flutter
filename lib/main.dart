@@ -19,8 +19,11 @@ import 'store.dart';
 
 // Giao diện kiểu app chấm công iOS: thanh tab dưới cùng (Chấm công / Báo cáo /
 // Cài đặt), nền xám nhóm, thẻ trắng bo tròn, tiêu đề lớn.
-// Tab Cài đặt chỉ chủ cửa hàng mới thấy — không có nút hiện ra ngoài,
-// mở bằng phím tắt Ctrl+H rồi nhập mật khẩu chủ.
+// 3 vai trò: nhân viên (mặc định khi mở app, chỉ thấy giờ làm của mình,
+// không thấy tiền), chủ cửa hàng (tài khoản quản lý, thấy đầy đủ app),
+// admin (quyền cao nhất, đầy đủ như chủ + mục Quản trị riêng).
+// Tab Cài đặt chỉ chủ/admin mới thấy — không có nút hiện ra ngoài,
+// mở bằng phím tắt Ctrl+H rồi nhập mật khẩu (chủ hoặc tổng).
 
 const _ink = iosLabel;
 const _muted = iosSecondary;
@@ -135,7 +138,14 @@ class _HomePageState extends State<HomePage>
     with SingleTickerProviderStateMixin {
   String? _employee;
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
-  bool _ownerMode = false;
+  // Vai trò hiện tại: 'employee' (mặc định) | 'owner' (chủ cửa hàng) |
+  // 'admin' (quyền cao nhất). Chủ và admin đều có quyền chủ ở các chỗ cũ.
+  String _role = 'employee';
+  // Chủ/admin có quyền chủ; admin có đầy đủ mọi chức năng như chủ.
+  bool get _isOwner => _role == 'owner' || _role == 'admin';
+  bool get _isAdmin => _role == 'admin';
+  // Nhân viên + đang bật ẩn tiền công thì không được thấy tiền/đơn giá.
+  bool get _payHidden => _role == 'employee' && _s.data.hidePay;
   DateTime _now = DateTime.now();
   int _tab = 0;
   String? _lastPdfPath;
@@ -175,6 +185,48 @@ class _HomePageState extends State<HomePage>
     _pulseCtrl.dispose();
     super.dispose();
   }
+
+  // Huy hiệu vai trò ở đầu tab Chấm công: chip "CHỦ" indigo khi ở chế
+  // độ chủ, chip "ADMIN" teal khi ở chế độ admin. Nhân viên không có chip.
+  Widget _roleBadge() {
+    if (_role == 'owner') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: iosIndigo.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text('CHỦ',
+            style: TextStyle(
+                color: iosIndigo,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1)),
+      );
+    }
+    if (_role == 'admin') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: _teal.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text('ADMIN',
+            style: TextStyle(
+                color: _accentDark,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1)),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  // Nhãn chip chọn nhân viên: nhân viên + đang ẩn tiền thì chỉ hiện tên,
+  // không hiện đơn giá giờ (có đơn giá là tính ra được tiền).
+  String _employeeChipLabel(Employee e) => _payHidden
+      ? e.name
+      : '${e.name} · ${e.rate} ${_s.data.currency}/giờ';
 
   // Nút ⓘ hỗ trợ: icon indigo đặc trong vòng tròn tint + vòng lan tỏa
   // nhấp nháy liên tục cho dễ nhận biết.
@@ -490,8 +542,11 @@ class _HomePageState extends State<HomePage>
                           icon: Icons.description,
                           tint: _teal,
                           title: 'Báo cáo',
-                          bullets: const [
-                            'Xem tổng giờ, tăng ca, tiền công theo tháng; bấm vào 1 ngày để sửa.',
+                          bullets: [
+                            // Đang bật ẩn tiền: nhắc rõ tiền công chỉ chủ mới thấy.
+                            _s.data.hidePay
+                                ? 'Xem tổng giờ, tăng ca theo tháng (tiền công chỉ chủ mới thấy); bấm vào 1 ngày để sửa.'
+                                : 'Xem tổng giờ, tăng ca, tiền công theo tháng; bấm vào 1 ngày để sửa.',
                             'Nút Xuất PDF để lưu bảng chấm công tháng.',
                           ],
                         ),
@@ -691,13 +746,19 @@ class _HomePageState extends State<HomePage>
     return ok == true;
   }
 
+  // Đăng nhập 3 vai trò bằng Ctrl+H: nhập mật khẩu 1 lần, kiểm tra mật
+  // khẩu tổng TRƯỚC (đúng -> admin), rồi mới kiểm tra mật khẩu chủ
+  // (đúng -> chủ). Nhấn Ctrl+H lần nữa thì thoát về nhân viên.
   Future<void> _ownerLogin() async {
-    if (_ownerMode) {
+    if (_role != 'employee') {
+      final wasAdmin = _isAdmin;
       setState(() {
-        _ownerMode = false;
+        _role = 'employee';
         _tab = 0;
       });
-      _snack('Đã thoát chế độ chủ cửa hàng.');
+      _snack(wasAdmin
+          ? 'Đã thoát chế độ admin.'
+          : 'Đã thoát chế độ chủ cửa hàng.');
       return;
     }
     if (!_s.ownerPasswordSet) {
@@ -712,19 +773,32 @@ class _HomePageState extends State<HomePage>
       await _save();
       _snack('Đã đặt mật khẩu. Giữ kỹ mật khẩu này.');
     }
-    final pw = await _askPassword('Nhập mật khẩu chủ');
-    if (pw != null && _s.checkOwnerPassword(pw)) {
-      setState(() {
-        _ownerMode = true;
-        _tab = 2;
-      });
-      _snack('Đã vào chế độ chủ cửa hàng.');
-    } else if (pw != null) {
+    final pw = await _askPassword('Nhập mật khẩu');
+    if (pw == null) return;
+    final role = _s.resolveLoginRole(pw);
+    if (role == null) {
       _snack('Mật khẩu không đúng.');
+      return;
     }
+    setState(() {
+      _role = role;
+      _tab = 2;
+    });
+    _snack(role == 'admin'
+        ? 'Đã vào chế độ admin.'
+        : 'Đã vào chế độ chủ cửa hàng.');
   }
 
+  // Đổi mật khẩu chủ: hỏi mật khẩu hiện tại trước — chấp nhận mật khẩu
+  // chủ cũ HOẶC mật khẩu tổng (để admin đổi được mà không cần biết
+  // mật khẩu chủ cũ) — rồi mới nhập mật khẩu mới 2 lần.
   Future<void> _changeOwnerPassword() async {
+    final current = await _askPassword('Mật khẩu hiện tại');
+    if (current == null) return;
+    if (_s.resolveLoginRole(current) == null) {
+      _snack('Mật khẩu hiện tại không đúng.');
+      return;
+    }
     final pw = await _askPassword('Mật khẩu chủ mới');
     if (pw == null || pw.isEmpty) return;
     final pw2 = await _askPassword('Nhập lại mật khẩu mới');
@@ -737,6 +811,61 @@ class _HomePageState extends State<HomePage>
     _snack('Đã đổi mật khẩu chủ.');
   }
 
+  // --- Mật khẩu tổng (admin) -------------------------------------------
+  // Đặt lần đầu (chưa có mật khẩu tổng): nhập mới 2 lần.
+  Future<void> _setMasterPassword() async {
+    final pw = await _askPassword('Đặt mật khẩu tổng');
+    if (pw == null || pw.isEmpty) return;
+    final pw2 = await _askPassword('Nhập lại mật khẩu tổng');
+    if (pw != pw2) {
+      _snack('Hai lần nhập không khớp.');
+      return;
+    }
+    await _s.setMasterPassword(pw);
+    setState(() {});
+    _snack('Đã đặt mật khẩu tổng. Chỉ anh biết mật khẩu này.');
+  }
+
+  // Đổi mật khẩu tổng (chỉ admin): nhập mật khẩu tổng cũ + mới 2 lần.
+  Future<void> _changeMasterPassword() async {
+    final current = await _askPassword('Mật khẩu tổng hiện tại');
+    if (current == null) return;
+    if (!_s.checkMasterPassword(current)) {
+      _snack('Mật khẩu tổng hiện tại không đúng.');
+      return;
+    }
+    final pw = await _askPassword('Mật khẩu tổng mới');
+    if (pw == null || pw.isEmpty) return;
+    final pw2 = await _askPassword('Nhập lại mật khẩu tổng mới');
+    if (pw != pw2) {
+      _snack('Hai lần nhập không khớp.');
+      return;
+    }
+    await _s.setMasterPassword(pw);
+    _snack('Đã đổi mật khẩu tổng.');
+  }
+
+  // Admin đặt lại mật khẩu chủ mà không cần biết mật khẩu chủ cũ:
+  // nhập mật khẩu tổng + mật khẩu chủ mới 2 lần.
+  Future<void> _resetOwnerPassword() async {
+    final master = await _askPassword('Mật khẩu tổng');
+    if (master == null) return;
+    if (!_s.checkMasterPassword(master)) {
+      _snack('Mật khẩu tổng không đúng.');
+      return;
+    }
+    final pw = await _askPassword('Mật khẩu chủ mới');
+    if (pw == null || pw.isEmpty) return;
+    final pw2 = await _askPassword('Nhập lại mật khẩu mới');
+    if (pw != pw2) {
+      _snack('Hai lần nhập không khớp.');
+      return;
+    }
+    _s.setOwnerPassword(pw);
+    await _save();
+    _snack('Đã đặt lại mật khẩu chủ.');
+  }
+
   // --- Sửa/thêm từng ngày (EntryEditor kiểu iOS) ---
   // Ngày hôm nay ai cũng sửa được; ca qua đêm kết thúc hôm nay cũng
   // sửa được trong buổi sáng hôm đó; ngày khác chỉ chủ mới sửa.
@@ -747,7 +876,7 @@ class _HomePageState extends State<HomePage>
     final editable = shift != null
         ? canEmployeeEditShift(shift.date, shift.clockIn, shift.clockOut)
         : day == _todayStr;
-    if (!editable && !_ownerMode) {
+    if (!editable && !_isOwner) {
       _snack('Ngày đã qua bạn không có quyền sửa hãy liên hệ admin để được trợ giúp');
       return;
     }
@@ -844,11 +973,14 @@ class _HomePageState extends State<HomePage>
                                               color: _ink)),
                                     ]),
                               ),
-                              CupertinoButton(
-                                padding: EdgeInsets.zero,
-                                onPressed: () => pickDate(setState),
-                                child: const Text('Chọn ngày'),
-                              ),
+                              // Nhân viên thêm ngày chỉ được thêm đúng
+                              // hôm nay nên không cho chọn ngày khác.
+                              if (_isOwner)
+                                CupertinoButton(
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () => pickDate(setState),
+                                  child: const Text('Chọn ngày'),
+                                ),
                             ]),
                           ),
                           const SizedBox(height: 16),
@@ -1029,6 +1161,19 @@ class _HomePageState extends State<HomePage>
                             child: PrimaryButton(
                               label: 'Lưu',
                               onPressed: () {
+                                // Kiểm tra lại lúc lưu: nhân viên không
+                                // được lưu ca ngày đã qua (kể cả khi đã
+                                // đổi ngày trong hộp thoại Thêm ngày).
+                                final allowed = _isOwner ||
+                                    (shift != null
+                                        ? canEmployeeEditShift(shift.date,
+                                            shift.clockIn, shift.clockOut)
+                                        : canEmployeeAddShift(dstr));
+                                if (!allowed) {
+                                  _snack(
+                                      'Ngày đã qua bạn không có quyền sửa hãy liên hệ admin để được trợ giúp');
+                                  return;
+                                }
                                 try {
                                   if (shift != null) {
                                     _s.ownerUpdateShift(
@@ -1201,6 +1346,9 @@ class _HomePageState extends State<HomePage>
         employee: emp,
         year: _month.year,
         month: _month.month,
+        // Nhân viên + đang ẩn tiền: PDF bỏ cột giờ công/tăng ca và
+        // phần tổng kết tiền công; chủ/admin xuất đầy đủ như cũ.
+        hideSensitive: _payHidden,
       );
       final dir = await getApplicationDocumentsDirectory();
       final file = File(
@@ -1283,14 +1431,14 @@ class _HomePageState extends State<HomePage>
           icon: Icon(Icons.access_time_filled), label: 'Chấm công'),
       const BottomNavigationBarItem(
           icon: Icon(Icons.description), label: 'Báo cáo'),
-      if (_ownerMode)
+      if (_isOwner)
         const BottomNavigationBarItem(
             icon: Icon(Icons.settings), label: 'Cài đặt'),
     ];
     final pages = <Widget>[
       _attendanceTab(),
       _reportTab(),
-      if (_ownerMode) _settingsTab(),
+      if (_isOwner) _settingsTab(),
     ];
     // Phím tắt Ctrl+H mở đăng nhập chủ cửa hàng (không có nút hiện ngoài).
     return Shortcuts(
@@ -1363,6 +1511,10 @@ class _HomePageState extends State<HomePage>
                       letterSpacing: 1.5),
                 ),
               ),
+              if (_role != 'employee') ...[
+                _roleBadge(),
+                const SizedBox(width: 6),
+              ],
               _pulsingInfoButton(),
             ]),
             const SizedBox(height: 14),
@@ -1402,7 +1554,7 @@ class _HomePageState extends State<HomePage>
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: ChoiceChip(
-                      label: Text('${e.name} · ${e.rate} ${data.currency}/giờ'),
+                      label: Text(_employeeChipLabel(e)),
                       selected: selected,
                       onSelected: (_) => setState(() => _employee = e.name),
                       selectedColor: _accent,
@@ -1610,7 +1762,7 @@ class _HomePageState extends State<HomePage>
                   value: fmtDuration(monthOvertime),
                   title: 'Tăng ca'),
             ]),
-            if (emp != null) ...[
+            if (emp != null && !_payHidden) ...[
               const SizedBox(height: 12),
               _salaryCard(data, emp, monthTotal.minutes),
             ],
@@ -1653,7 +1805,7 @@ class _HomePageState extends State<HomePage>
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: ChoiceChip(
-                    label: Text('${e.name} · ${e.rate} ${data.currency}/giờ'),
+                    label: Text(_employeeChipLabel(e)),
                     selected: selected,
                     onSelected: (_) => setState(() => _employee = e.name),
                     selectedColor: _accent,
@@ -1696,7 +1848,7 @@ class _HomePageState extends State<HomePage>
                 value: fmtDuration(overtime),
                 title: 'Tăng ca'),
           ]),
-          if (emp != null) ...[
+          if (emp != null && !_payHidden) ...[
             const SizedBox(height: 12),
             _salaryCard(data, emp, total.minutes),
           ],
@@ -2091,12 +2243,83 @@ class _HomePageState extends State<HomePage>
               ListTile(
                 leading: const IconTile(
                     icon: Icons.lock_open, tint: _danger),
-                title: const Text('Thoát chế độ chủ cửa hàng',
-                    style: TextStyle(color: _danger)),
+                title: Text(
+                    _isAdmin
+                        ? 'Thoát chế độ admin'
+                        : 'Thoát chế độ chủ cửa hàng',
+                    style: const TextStyle(color: _danger)),
                 onTap: _ownerLogin,
               ),
             ]),
           ),
+          // --- Mục Quản trị (admin) ---
+          // Chưa có mật khẩu tổng: chủ đặt mật khẩu tổng ở đây.
+          // Đã có mật khẩu tổng: mục này CHỈ hiện ở chế độ admin.
+          if (!_s.hasMasterPassword) ...[
+            const SizedBox(height: 20),
+            const AppSectionHeader(
+                icon: Icons.admin_panel_settings, title: 'Quản trị'),
+            const SizedBox(height: 8),
+            AppCard(
+              padding: EdgeInsets.zero,
+              child: ListTile(
+                leading: const IconTile(
+                    icon: Icons.admin_panel_settings, tint: _accent),
+                title: const Text('Đặt mật khẩu tổng'),
+                subtitle: const Text(
+                    'Mật khẩu quyền cao nhất, luôn vào được dù mật khẩu chủ đã đổi'),
+                trailing: const Icon(Icons.chevron_right,
+                    size: 16, color: _muted),
+                onTap: _setMasterPassword,
+              ),
+            ),
+          ],
+          if (_isAdmin && _s.hasMasterPassword) ...[
+            const SizedBox(height: 20),
+            const AppSectionHeader(
+                icon: Icons.admin_panel_settings, title: 'Quản trị'),
+            const SizedBox(height: 8),
+            AppCard(
+              padding: EdgeInsets.zero,
+              child: Column(children: [
+                ListTile(
+                  leading: const IconTile(
+                      icon: Icons.admin_panel_settings, tint: _accent),
+                  title: const Text('Đổi mật khẩu tổng'),
+                  trailing: const Icon(Icons.chevron_right,
+                      size: 16, color: _muted),
+                  onTap: _changeMasterPassword,
+                ),
+                const Divider(height: 1, color: _line),
+                ListTile(
+                  leading: const IconTile(
+                      icon: Icons.lock_reset, tint: _accent),
+                  title: const Text('Đặt lại mật khẩu chủ'),
+                  subtitle: const Text(
+                      'Không cần biết mật khẩu chủ cũ'),
+                  trailing: const Icon(Icons.chevron_right,
+                      size: 16, color: _muted),
+                  onTap: _resetOwnerPassword,
+                ),
+                const Divider(height: 1, color: _line),
+                ListTile(
+                  leading: const IconTile(
+                      icon: Icons.visibility_off, tint: _accent),
+                  title: const Text('Ẩn tiền công với nhân viên'),
+                  subtitle: const Text(
+                      'Nhân viên chỉ thấy giờ làm, không thấy tiền công và đơn giá giờ'),
+                  trailing: Switch(
+                    value: data.hidePay,
+                    activeThumbColor: _accent,
+                    onChanged: (v) async {
+                      setState(() => data.hidePay = v);
+                      await _save();
+                    },
+                  ),
+                ),
+              ]),
+            ),
+          ],
         ]),
       ),
     );

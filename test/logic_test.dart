@@ -176,6 +176,54 @@ void main() {
     expect(durationMinutes(20 * 60, 5 * 60), 540);
   });
 
+  test('nhan vien them ngay moi chi duoc them dung hom nay', () {
+    final now = DateTime(2026, 11, 6, 8, 0);
+    expect(canEmployeeAddShift('2026-11-06', now: now), isTrue);
+    expect(canEmployeeAddShift('2026-11-05', now: now), isFalse);
+    expect(canEmployeeAddShift('2026-11-07', now: now), isFalse);
+  });
+
+  test('an tien cong: mac dinh bat, file cu khong co key van bat', () {
+    expect(AppData.seed().hidePay, isTrue);
+    expect(AppData.fromJson({}).hidePay, isTrue);
+    final data = AppData.seed()..hidePay = false;
+    final restored = AppData.fromJson(
+        jsonDecode(jsonEncode(data.toJson())) as Map<String, dynamic>);
+    expect(restored.hidePay, isFalse);
+  });
+
+  test('mat khau tong: admin luon vao duoc du mat khau chu da doi', () async {
+    final f = File('/tmp/test-gio-lam-master.json');
+    for (final suffix in ['', '.key', '.bak', '.master']) {
+      final x = File('/tmp/test-gio-lam-master.json$suffix');
+      if (await x.exists()) await x.delete();
+    }
+    final store = DataStore(f);
+    store.data = AppData.seed();
+    await store.save();
+    expect(store.hasMasterPassword, isFalse);
+    expect(store.resolveLoginRole('batky'), isNull);
+    // Dat mat khau chu + mat khau tong
+    store.setOwnerPassword('chu123');
+    await store.setMasterPassword('admin123');
+    expect(store.hasMasterPassword, isTrue);
+    expect(store.resolveLoginRole('admin123'), 'admin');
+    expect(store.resolveLoginRole('chu123'), 'owner');
+    expect(store.resolveLoginRole('sai'), isNull);
+    // Doi mat khau chu: mat khau tong van vao duoc admin
+    store.setOwnerPassword('chu456');
+    await store.save(); // luu mat khau chu moi xuong dia truoc khi tai lai
+    expect(store.resolveLoginRole('admin123'), 'admin');
+    expect(store.resolveLoginRole('chu456'), 'owner');
+    expect(store.resolveLoginRole('chu123'), isNull);
+    // Tai lai tu dia: mat khau tong van con (luu file rieng)
+    final store2 = DataStore(f);
+    await store2.load();
+    expect(store2.hasMasterPassword, isTrue);
+    expect(store2.resolveLoginRole('admin123'), 'admin');
+    expect(store2.resolveLoginRole('chu456'), 'owner');
+  });
+
   test('ca qua dem nhan vien sua duoc vao sang hom ket thuc', () {
     final now = DateTime(2026, 11, 6, 8, 0); // sang 6/11
     // Ca 20:00 ngay 5/11 -> 05:00 ngay 6/11: sua duoc sang 6/11.

@@ -63,6 +63,11 @@ File chạy nằm ở `build\windows\x64\runner\Release\gio_lam.exe` — copy c�
 mục `Release` đi đâu cũng chạy được, đúp chuột là mở (không cần Python, không
 cần cmd).
 
+Bộ cài đặt: cài Inno Setup 6 rồi chạy `iscc installer.iss` trong thư mục
+repo — file cài ra ở `installer-output\ChamCongHTHSHOP-Setup.exe`, tạo
+shortcut ngoài desktop tên "Chấm Công HTHSHOP". CI cũng build sẵn bộ cài
+này trong mỗi Release trên GitHub.
+
 ## Đồng bộ cloud (Firebase)
 
 App đồng bộ dữ liệu chấm công lên cloud để máy ở cửa hàng, máy chủ
@@ -72,7 +77,7 @@ vẫn là nguồn chính khi offline: mất mạng vẫn chấm công bình thư
 mạng lại tự đẩy lên; mở app thì tải bản mới nhất trên cloud về nếu có.
 
 - **Luật xem**: mỗi cửa hàng chỉ hiện cửa hàng của mình. Chủ cửa hàng
-  (quản lý) và admin tổng đăng nhập cloud xong thì có ô chọn cửa hàng
+  (quản lý) và admin tổng nhập mã PIN xong thì có ô chọn cửa hàng
   ở đầu tab Chấm công, xem được hết các cửa hàng.
 - **Cách đồng bộ**: mỗi cửa hàng là 1 doc trong collection `stores`
   (doc id = tên cửa hàng, vd `Rybna`), chứa toàn bộ dữ liệu + mốc
@@ -82,26 +87,86 @@ mạng lại tự đẩy lên; mở app thì tải bản mới nhất trên clou
   Mốc đồng bộ lưu trong chính file JSON local (`cloudUpdatedAt`) nên
   không tải đè lên giờ công nhập offline chưa kịp đẩy.
 
+### Đăng nhập bằng mã PIN (thay cho email/mật khẩu)
+
+Mở app nhập mã PIN là vào luôn, không cần email/mật khẩu:
+
+- **Cửa hàng**: nhập mã PIN của cửa hàng (do chủ cấp, 4-6 chữ số)
+  thì chỉ hiện đúng cửa hàng đó + nhân viên của nó.
+- **Chủ cửa hàng**: nhập mã PIN chủ thì xem được hết các cửa hàng
+  (có ô chọn cửa hàng), quản lý được cửa hàng + nhân viên.
+- **Admin**: nhập mã PIN admin thì xem được tất cả, quyền cao hơn chủ
+  (mục Quản trị riêng trong Cài đặt).
+- **Chưa có mã PIN nào** (app mới cập nhật / project mới): người mở
+  app đầu tiên đặt mã PIN admin (nhập 2 lần) rồi vào luôn với vai trò
+  admin. Máy nào đang đăng nhập bằng email từ bản cũ thì cũng được
+  coi như admin để đặt PIN luôn.
+- Mất mạng thì bấm "Dùng offline" vẫn chấm công bình thường, có mạng
+  nhập PIN lại để đồng bộ.
+
+Kỹ thuật: hash mã PIN lưu công khai trong doc `pins/config`
+(collection `pins`, field `stores` là map tên cửa hàng -> hash PIN,
+cộng `ownerPinHash` / `adminPinHash`). App kiểm tra hash rồi đăng
+nhập bằng tài khoản Firebase Auth suy ra từ PIN (email dạng
+`store-<slug>@gio-lam.local` / `owner@gio-lam.local` /
+`admin@gio-lam.local`, mật khẩu suy ra từ PIN). Tài khoản và doc
+`users/{uid}` do chủ/admin tạo ngay trong app khi thêm cửa hàng hoặc
+đặt mã PIN — không cần tạo tay trong Console nữa.
+
+**GIỚI HẠN TRUNG THỰC**: mã PIN ngắn (4-6 số) + hash lưu công khai
+nên PIN chỉ ngăn người tò mò xem nhầm cửa hàng, không chống được
+người cố tình dò (4-6 số thì dò hết cũng nhanh). Đừng dùng PIN làm
+mật khẩu cho dữ liệu nhạy cảm khác. Mã PIN cloud khác mật khẩu tổng
+local (file `gio-lam.json.master`, bấm Ctrl+H): PIN để vào app +
+đồng bộ, mật khẩu tổng để mở chế độ admin trên máy này kể cả khi
+mất mạng.
+
+### Chủ tự thêm cửa hàng + nhân viên
+
+Chủ (hoặc admin) vào **Cài đặt > Cửa hàng** (cần nhập mã PIN
+chủ/admin trước):
+
+1. Bấm **Thêm cửa hàng** → nhập tên cửa hàng + mã PIN (4-6 số, nhập
+   2 lần). App tự tạo dữ liệu cửa hàng mới trên cloud + tài khoản +
+   mã PIN. Mã PIN hiện **1 lần duy nhất** sau khi tạo — chủ báo mã
+   này cho cửa hàng, sau này không xem lại được.
+2. Thêm nhân viên cho cửa hàng đang xem ở **Cài đặt > Nhân viên**
+   (nhân viên thêm/sửa/xóa luôn ghi vào đúng cửa hàng đang chọn
+   trong ô chọn ở đầu tab Chấm công).
+3. Gửi **bộ cài app** (file `ChamCongHTHSHOP-Setup-windows-N.exe`
+   trong Release trên GitHub) cho cửa hàng đó. Cửa hàng cài xong,
+   mở app nhập mã PIN là vào đúng cửa hàng của mình.
+4. Xóa cửa hàng: bấm nút xóa ở dòng cửa hàng đó (không xóa được cửa
+   hàng đang xem — đổi sang cửa hàng khác trước). Xóa xong thì tài
+   khoản của cửa hàng đó mất quyền xem (doc users bị xóa).
+
+Chưa có ở bản này: **đổi mã PIN cửa hàng** — muốn đổi thì chủ tạo
+lại cửa hàng mới (tên khác hoặc xóa cửa hàng cũ rồi tạo lại) và báo
+mã PIN mới cho cửa hàng.
+
 ### Admin làm 1 lần trên Firebase Console (console.firebase.google.com)
 
 1. **Firestore**: vào Build > Firestore Database, tạo database nếu chưa
    có. Vào Firestore > Rules, dán toàn bộ file `firestore.rules` trong
-   repo này rồi bấm Publish.
-2. **Tài khoản đăng nhập**: vào Build > Authentication > Users > Add
-   user, tạo 1 tài khoản (email + mật khẩu) cho mỗi cửa hàng, cộng 1
-   tài khoản admin. Mật khẩu này là mật khẩu đăng nhập đồng bộ trên app,
-   khác với mật khẩu chủ / mật khẩu tổng bấm Ctrl+H trong app.
-3. **Quyền xem**: vào Firestore > Data, tạo collection `users`, thêm 1
-   doc cho mỗi tài khoản — doc id = UID của tài khoản đó (xem trong
-   Authentication > Users, bấm vào tài khoản để copy UID), field:
-   `storeId` (tên cửa hàng, vd `Rybna`; tài khoản admin/chủ xem hết thì
-   ghi `*`) và `role` (`store` cho máy cửa hàng, `owner` cho chủ cửa
-   hàng, `admin` cho admin tổng).
-4. Mỗi máy mở app lần đầu: nhập email + mật khẩu đồng bộ của máy đó.
-   Máy cửa hàng tự nhận đúng cửa hàng của tài khoản; máy admin/chủ thì
-   chọn cửa hàng ở ô phía trên tab Chấm công. Chưa có doc `users/{uid}`
-   thì tài khoản đó không đồng bộ được (app vẫn chạy offline) — admin
-   tạo doc xong thì đăng xuất rồi đăng nhập lại trên máy đó.
+   repo này rồi bấm Publish. **LƯU Ý: bản rules đã đổi sau bản đồng bộ
+   đầu (thêm collection `pins` + cho chủ/admin tạo doc users) — nếu
+   đã dán bản rules cũ thì dán lại bản mới này.**
+2. Không cần tạo tài khoản tay trong Console nữa: tài khoản + doc
+   `users/{uid}` được tạo tự động trong app khi chủ thêm cửa hàng
+   hoặc admin đặt mã PIN. Không cần bật Anonymous hay App Check
+   (App Check không hỗ trợ Windows — bật ép buộc sẽ chặn hết đồng bộ).
+
+## Bộ cài đặt (Chấm Công HTHSHOP)
+
+App đóng gói thành bộ cài đặt Windows bằng Inno Setup (file
+`installer.iss` ở root repo). CI build xong sẽ đăng cả 2 file lên
+Release: file zip cũ (`gio-lam-windows.zip`) và bộ cài
+(`ChamCongHTHSHOP-Setup-windows-N.exe`). Chạy bộ cài thì app được
+cài vào thư mục Programs của user, tạo shortcut ngoài desktop tên
+**Chấm Công HTHSHOP** (+ shortcut Start Menu), có gỡ cài đặt.
+Không cần quyền admin để cài. Tên cửa sổ trong app vẫn là
+"Chấm công by Hiếu Lê", chỉ tên chương trình cài đặt + shortcut là
+"Chấm Công HTHSHOP".
 
 ## Kiểm thử
 

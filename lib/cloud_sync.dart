@@ -8,8 +8,12 @@
 //   hàng (vd "Rybna"), chứa toàn bộ AppData.toJson + updatedAt.
 //   Quy tắc "bản mới thắng": chỉ tải cloud về khi updatedAt trên cloud
 //   mới hơn mốc cloudUpdatedAt đã lưu trong JSON local.
-// - Đăng nhập bằng tài khoản Firebase Auth (email/mật khẩu, admin tạo
-//   trong Console). Quyền xem map qua doc `users/{uid}`:
+// - Đăng nhập bằng MÃ PIN (thay cho email/mật khẩu): mỗi cửa hàng 1
+//   PIN riêng, chủ/admin cũng có PIN riêng. PIN suy ra tài khoản
+//   Firebase Auth của đối tượng đó (email + mật khẩu suy ra từ PIN,
+//   xem logic.dart). Hash PIN lưu công khai trong doc `pins/config`
+//   để app kiểm tra PIN khi đăng nhập (xem firestore.rules).
+//   Quyền xem map qua doc `users/{uid}`:
 //   {storeId, role: 'store' | 'owner' | 'admin'}; storeId '*' = xem
 //   được tất cả cửa hàng. Chưa có doc users/{uid} thì mặc định chỉ
 //   xem cửa hàng local hiện tại (không chặn app, chỉ là chưa đồng bộ).
@@ -20,6 +24,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import 'firebase_options.dart';
+import 'logic.dart';
 import 'store.dart';
 
 /// Mốc thời gian chờ tối đa cho 1 lần gọi Firestore (tránh kẹt khi
@@ -31,6 +36,32 @@ const _cloudTimeout = Duration(seconds: 10);
 /// đồng bộ local gần nhất (tránh ghi đè giờ nhập offline chưa đẩy lên).
 bool shouldApplyRemote(int remoteUpdatedAt, int localCloudUpdatedAt) =>
     remoteUpdatedAt > localCloudUpdatedAt;
+
+/// Cấu hình mã PIN lưu trong doc `pins/config` trên Firestore:
+/// `stores` = map tên cửa hàng -> hash SHA-256 của PIN cửa hàng đó;
+/// `ownerPinHash` / `adminPinHash` = hash PIN của chủ / admin.
+class PinConfig {
+  final Map<String, String> storePins;
+  final String? ownerPinHash;
+  final String? adminPinHash;
+  PinConfig(
+      {required this.storePins, this.ownerPinHash, this.adminPinHash});
+
+  factory PinConfig.fromDoc(Map<String, dynamic>? d) {
+    final stores = <String, String>{};
+    final m = d?['stores'];
+    if (m is Map) {
+      m.forEach((k, v) {
+        if (v is String) stores[k.toString()] = v;
+      });
+    }
+    return PinConfig(
+      storePins: stores,
+      ownerPinHash: d?['ownerPinHash'] as String?,
+      adminPinHash: d?['adminPinHash'] as String?,
+    );
+  }
+}
 
 class CloudSync {
   bool firebaseReady = false;
@@ -45,6 +76,11 @@ class CloudSync {
   DateTime? lastSyncTime;
   // Lỗi đồng bộ gần nhất (nếu có), để hiện ở Cài đặt.
   String? lastSyncError;
+  // Cấu hình mã PIN đã tải (null = doc pins/config chưa tồn tại).
+  PinConfig? pinConfig;
+  // Lần tải pins/config gần nhất bị lỗi mạng (để màn hình PIN phân
+  // biệt "chưa có PIN nào" với "mất mạng, không kiểm tra được PIN").
+  bool pinFetchFailed = false;
 
   FirebaseFirestore get _db => FirebaseFirestore.instance;
 
@@ -72,12 +108,6 @@ class CloudSync {
     }
   }
 
-  Future<void> signIn(String email, String password) async {
-    await FirebaseAuth.instance
-        .signInWithEmailAndPassword(email: email, password: password)
-        .timeout(_cloudTimeout);
-  }
-
   Future<void> signOut() async {
     try {
       await FirebaseAuth.instance.signOut();
@@ -85,6 +115,327 @@ class CloudSync {
     cloudRole = null;
     cloudStoreId = null;
     storeIds = [];
+  }
+
+  // --- Mã PIN ----------------------------------------------------------
+  // Tải doc pins/config (đọc công khai theo Rules, không cần đăng
+  // nhập). Thử đăng nhập ẩn danh trước cho đúng luồng, nhưng nếu
+  // Anonymous chưa bật trong Console thì vẫn đọc được vì Rules cho
+  // đọc công khai — lỗi đăng nhập ẩn danh được bỏ qua. Trả về null
+  // khi doc chưa tồn tại (chưa ai đặt mã PIN) hoặc khi tải lỗi
+  // (pinFetchFailed = true để màn hình PIN phân biệt 2 trường hợp).
+  Future<PinConfig?> fetchPinConfig() async {
+    pinFetchFailed = false;
+    if (!firebaseReady) {
+      pinFetchFailed = true;
+      return null;
+    }
+    try {
+      if (FirebaseAuth.instance.currentUser == null) {
+        try {
+          await FirebaseAuth.instance
+              .signInAnonymously()
+              .timeout(_cloudTimeout);
+        } catch (_) {
+          // Anonymous chưa bật trong Console: vẫn đọc công khai được.
+        }
+      }
+      final doc = await _db
+          .collection('pins')
+          .doc('config')
+          .get()
+          .timeout(_cloudTimeout);
+      if (!doc.exists) {
+        pinConfig = null;
+        return null;
+      }
+      pinConfig = PinConfig.fromDoc(doc.data());
+      return pinConfig;
+    } catch (_) {
+      pinFetchFailed = true;
+      return null;
+    }
+  }
+
+  /// Đăng nhập bằng mã PIN: khớp hash trong pins/config thì đăng nhập
+  /// bằng tài khoản Firebase Auth suy ra từ PIN (email + mật khẩu đều
+  /// suy ra từ PIN, xem logic.dart). Sai PIN -> StateError
+  /// 'Mã PIN không đúng.' (không nói rõ PIN nào sai). Tài khoản chưa
+  /// được tạo (chủ tạo cửa hàng dở dang) thì tạo tài khoản rồi vào;
+  /// quyền xem mặc định theo cửa hàng local, chủ tạo lại cửa hàng thì
+  /// quyền sẽ đúng.
+  Future<void> signInWithPin(String pin) async {
+    final cfg = pinConfig ?? await fetchPinConfig();
+    if (cfg == null) {
+      if (pinFetchFailed) {
+        throw StateError('Mất mạng, không kiểm tra được mã PIN.');
+      }
+      throw StateError('Chưa có mã PIN nào. Nhờ admin đặt mã PIN trước.');
+    }
+    final resolved = resolvePinRole(
+        cfg.storePins, cfg.ownerPinHash, cfg.adminPinHash, pin);
+    if (resolved == null) throw StateError('Mã PIN không đúng.');
+    final email = accountEmail(resolved.role, resolved.storeId);
+    final pw = accountPassword(resolved.role, resolved.storeId, pin);
+    try {
+      await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: pw)
+          .timeout(_cloudTimeout);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found') {
+        await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(email: email, password: pw)
+            .timeout(_cloudTimeout);
+      } else if (e.code == 'wrong-password' ||
+          e.code == 'invalid-credential') {
+        throw StateError('Mã PIN không đúng.');
+      } else {
+        rethrow;
+      }
+    }
+  }
+
+  /// Đặt mã PIN admin lần đầu (chưa có pins/config): người mở app đầu
+  /// tiên làm việc này. THỨ TỰ QUAN TRỌNG (theo luật bootstrap trong
+  /// firestore.rules): tạo tài khoản admin -> tạo doc users (lúc này
+  /// pins/config chưa tồn tại nên được phép) -> ghi pins/config.
+  /// Tài khoản admin đã tồn tại (đặt dở lần trước) thì đăng nhập lại
+  /// bằng PIN đó rồi làm tiếp, không báo lỗi.
+  Future<void> setupAdminPin(String pin) async {
+    final email = accountEmail('admin', '*');
+    final pw = accountPassword('admin', '*', pin);
+    UserCredential cred;
+    try {
+      cred = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: pw)
+          .timeout(_cloudTimeout);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        cred = await FirebaseAuth.instance
+            .signInWithEmailAndPassword(email: email, password: pw)
+            .timeout(_cloudTimeout);
+      } else {
+        rethrow;
+      }
+    }
+    final uid = cred.user!.uid;
+    await _db.collection('users').doc(uid).set(
+        {'storeId': '*', 'role': 'admin'}).timeout(_cloudTimeout);
+    final hash = pinHash(pin);
+    await _db.collection('pins').doc('config').set({
+      'stores': <String, String>{},
+      'adminPinHash': hash,
+    }).timeout(_cloudTimeout);
+    pinConfig = PinConfig(storePins: {}, adminPinHash: hash);
+  }
+
+  /// Tìm UID của 1 doc users theo storeId (và role nếu có), để dùng
+  /// lại khi tài khoản Auth đã tồn tại mà doc users bị thiếu (tạo dở
+  /// lần trước). Chỉ query theo 1 field rồi lọc field còn lại bằng
+  /// code để không cần composite index trên Firestore.
+  Future<String?> _findUserUid({String? storeId, String? role}) async {
+    try {
+      Query<Map<String, dynamic>> q = _db.collection('users');
+      if (storeId != null) {
+        q = q.where('storeId', isEqualTo: storeId);
+      } else if (role != null) {
+        q = q.where('role', isEqualTo: role);
+      }
+      final snap = await q.limit(10).get().timeout(_cloudTimeout);
+      for (final d in snap.docs) {
+        final data = d.data();
+        if (role != null && data['role'] != role) continue;
+        if (storeId != null && data['storeId'] != storeId) continue;
+        return d.id;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Tạo tài khoản Firebase Auth bằng app phụ (để không đăng xuất
+  /// phiên chủ/admin hiện tại — createUser trên app chính sẽ đổi
+  /// phiên đăng nhập) rồi tạo doc users/{uid} cho tài khoản đó.
+  /// Tài khoản đã tồn tại thì dùng lại UID cũ (tìm qua users doc,
+  /// hoặc đăng nhập thử bằng mật khẩu mới trên app phụ). Trả về UID.
+  Future<String> _provisionAccount({
+    required String email,
+    required String password,
+    required String storeId,
+    required String role,
+  }) async {
+    FirebaseApp? secondary;
+    try {
+      secondary = await Firebase.initializeApp(
+              name: 'provisioner',
+              options: DefaultFirebaseOptions.currentPlatform)
+          .timeout(_cloudTimeout);
+      final auth = FirebaseAuth.instanceFor(app: secondary);
+      String uid;
+      try {
+        final cred = await auth
+            .createUserWithEmailAndPassword(
+                email: email, password: password)
+            .timeout(_cloudTimeout);
+        uid = cred.user!.uid;
+      } on FirebaseAuthException catch (e) {
+        if (e.code != 'email-already-in-use') rethrow;
+        // Tài khoản đã có: tìm UID qua users doc, không có thì đăng
+        // nhập thử bằng mật khẩu mới (trường hợp tạo dở lần trước
+        // với đúng PIN này).
+        final found =
+            await _findUserUid(storeId: storeId, role: role);
+        if (found != null) {
+          uid = found;
+        } else {
+          try {
+            final cred = await auth
+                .signInWithEmailAndPassword(
+                    email: email, password: password)
+                .timeout(_cloudTimeout);
+            uid = cred.user!.uid;
+          } catch (_) {
+            throw StateError(
+                'Tài khoản $email đã tồn tại, nhờ admin kiểm tra.');
+          }
+        }
+      }
+      await _db.collection('users').doc(uid).set(
+          {'storeId': storeId, 'role': role}).timeout(_cloudTimeout);
+      return uid;
+    } finally {
+      try {
+        await secondary?.delete();
+      } catch (_) {}
+    }
+  }
+
+  /// Chủ/admin THÊM 1 cửa hàng: tạo tài khoản Auth + doc users +
+  /// doc stores/{tên} (dữ liệu seed, chưa có nhân viên) + thêm PIN
+  /// vào pins/config. Tên cửa hàng không được chứa '.' hay '/' (vì
+  /// tên dùng làm field path khi cập nhật map PIN + làm doc id).
+  /// Trả về mã PIN vừa tạo (để chủ báo cho cửa hàng, chỉ hiện 1 lần).
+  Future<String> createStore(String storeName, String pin) async {
+    if (!available || !canPickStore) {
+      throw StateError('Chưa đăng nhập chủ/admin.');
+    }
+    final name = storeName.trim();
+    if (name.isEmpty || name.contains('.') || name.contains('/')) {
+      throw StateError('Tên cửa hàng không được trống, chứa . hay /.');
+    }
+    if (storeIds.contains(name)) {
+      throw StateError('Cửa hàng $name đã có rồi.');
+    }
+    final email = accountEmail('store', name);
+    final pw = accountPassword('store', name, pin);
+    await _provisionAccount(
+        email: email, password: pw, storeId: name, role: 'store');
+    final seed = AppData(storeName: name, employees: []);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await _db.collection('stores').doc(name).set({
+      'data': seed.toJson(),
+      'updatedAt': now,
+      'updatedBy': _updatedBy(),
+    }, SetOptions(merge: true)).timeout(_cloudTimeout);
+    final hash = pinHash(pin);
+    try {
+      await _db.collection('pins').doc('config').update(
+          {'stores.$name': hash}).timeout(_cloudTimeout);
+    } catch (_) {
+      // pins/config chưa tồn tại (trường hợp hiếm): tạo mới kèm map.
+      await _db.collection('pins').doc('config').set(
+          {'stores': {name: hash}},
+          SetOptions(merge: true)).timeout(_cloudTimeout);
+    }
+    pinConfig?.storePins[name] = hash;
+    await fetchStoreIds();
+    return pin;
+  }
+
+  /// Chủ/admin XÓA 1 cửa hàng: xóa doc stores + doc users của cửa
+  /// hàng + mục PIN. Tài khoản Auth cũ vẫn còn (client không xóa
+  /// được tài khoản Auth) nhưng mất quyền vì không còn doc users.
+  Future<void> deleteStore(String storeName) async {
+    if (!available || !canPickStore) {
+      throw StateError('Chưa đăng nhập chủ/admin.');
+    }
+    await _db
+        .collection('stores')
+        .doc(storeName)
+        .delete()
+        .timeout(_cloudTimeout);
+    try {
+      final q = await _db
+          .collection('users')
+          .where('storeId', isEqualTo: storeName)
+          .get()
+          .timeout(_cloudTimeout);
+      for (final d in q.docs) {
+        try {
+          await d.reference.delete().timeout(_cloudTimeout);
+        } catch (_) {}
+      }
+    } catch (_) {}
+    try {
+      await _db.collection('pins').doc('config').update(
+          {'stores.$storeName': FieldValue.delete()}).timeout(_cloudTimeout);
+    } catch (_) {}
+    pinConfig?.storePins.remove(storeName);
+    await fetchStoreIds();
+  }
+
+  /// Admin ĐẶT/ĐỔI mã PIN chủ hoặc mã PIN admin: tạo tài khoản Auth
+  /// mới (mật khẩu suy ra từ PIN mới) + doc users mới, xóa doc users
+  /// cũ của vai trò đó (tài khoản Auth cũ mất quyền), cập nhật hash
+  /// trong pins/config. Đổi mã PIN admin xong thì phiên admin hiện
+  /// tại mất quyền (doc users của nó vừa bị xóa) nên bên gọi phải
+  /// đăng xuất rồi đăng nhập lại bằng PIN mới.
+  Future<void> setRolePin(String kind, String pin) async {
+    if (!available || cloudRole != 'admin') {
+      throw StateError('Chỉ admin mới đặt mã PIN.');
+    }
+    if (kind != 'owner' && kind != 'admin') {
+      throw StateError('Vai trò không hợp lệ.');
+    }
+    final email = accountEmail(kind, '*');
+    final pw = accountPassword(kind, '*', pin);
+    final uid = await _provisionAccount(
+        email: email, password: pw, storeId: '*', role: kind);
+    // Xóa doc users cũ của vai trò này (trừ doc vừa tạo).
+    try {
+      final q = await _db
+          .collection('users')
+          .where('role', isEqualTo: kind)
+          .get()
+          .timeout(_cloudTimeout);
+      for (final d in q.docs) {
+        if (d.id != uid && (d.data()['storeId'] as String?) == '*') {
+          try {
+            await d.reference.delete().timeout(_cloudTimeout);
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    final hash = pinHash(pin);
+    final field = kind == 'owner' ? 'ownerPinHash' : 'adminPinHash';
+    try {
+      await _db
+          .collection('pins')
+          .doc('config')
+          .update({field: hash}).timeout(_cloudTimeout);
+    } catch (_) {
+      await _db.collection('pins').doc('config').set(
+          {field: hash}, SetOptions(merge: true)).timeout(_cloudTimeout);
+    }
+    if (pinConfig != null) {
+      pinConfig = PinConfig(
+        storePins: pinConfig!.storePins,
+        ownerPinHash:
+            kind == 'owner' ? hash : pinConfig!.ownerPinHash,
+        adminPinHash: kind == 'admin' ? hash : pinConfig!.adminPinHash,
+      );
+    }
   }
 
   /// Tải doc users/{uid} để biết tài khoản này là ai (store/owner/admin)

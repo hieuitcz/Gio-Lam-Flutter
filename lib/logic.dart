@@ -6,6 +6,11 @@
 //   ngày bắt đầu ca (ngày vào ca).
 // - Nhập tay chỉ được trong đúng ngày hôm đó, và được ghi chú "nhập tay".
 // - Ngày đã qua: nhân viên không sửa được, chỉ chủ cửa hàng mới sửa được.
+// - Mã PIN đăng nhập cloud: 4-6 chữ số, mỗi cửa hàng 1 PIN riêng;
+//   PIN suy ra tài khoản Firebase Auth của cửa hàng đó.
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 
 /// "9:00" / "09:00" -> số phút từ 00:00, hoặc null nếu sai định dạng.
 int? parseHhmm(String text) {
@@ -84,4 +89,93 @@ String storeNameFromFile(String fileName) {
 bool isToday(DateTime day, {DateTime? now}) {
   now ??= DateTime.now();
   return day.year == now.year && day.month == now.month && day.day == now.day;
+}
+
+// --- Mã PIN đăng nhập cloud -------------------------------------------
+// Mỗi cửa hàng có 1 mã PIN riêng (4-6 chữ số). Nhập PIN là vào luôn,
+// thay cho đăng nhập email/mật khẩu: PIN suy ra tài khoản Firebase
+// Auth của đối tượng đó (email + mật khẩu đều suy ra từ PIN nên chủ
+// chỉ cần nhớ PIN, không cần nhớ email/mật khẩu).
+// GIỚI HẠN TRUNG THỰC: PIN ngắn + hash lưu công khai trong doc
+// pins/config nên PIN chỉ ngăn người tò mò xem nhầm cửa hàng, không
+// chống được người cố tình dò (4-6 số thì dò hết cũng nhanh). Đừng
+// dùng PIN làm mật khẩu cho dữ liệu nhạy cảm khác.
+
+/// Mã PIN hợp lệ: 4-6 chữ số.
+bool isValidPin(String pin) => RegExp(r'^\d{4,6}$').hasMatch(pin);
+
+/// SHA-256 hex của mã PIN (lưu trong pins/config, không lưu PIN gốc).
+String pinHash(String pin) =>
+    sha256.convert(utf8.encode(pin)).toString();
+
+const _viDiacritics = {
+  'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ả': 'a', 'ạ': 'a',
+  'ă': 'a', 'ằ': 'a', 'ắ': 'a', 'ẳ': 'a', 'ẵ': 'a', 'ặ': 'a',
+  'ầ': 'a', 'ấ': 'a', 'ẩ': 'a', 'ẫ': 'a', 'ậ': 'a',
+  'è': 'e', 'é': 'e', 'ê': 'e', 'ẻ': 'e', 'ẹ': 'e',
+  'ề': 'e', 'ế': 'e', 'ể': 'e', 'ễ': 'e', 'ệ': 'e',
+  'ì': 'i', 'í': 'i', 'î': 'i', 'ỉ': 'i', 'ị': 'i',
+  'ò': 'o', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ỏ': 'o', 'ọ': 'o',
+  'ơ': 'o', 'ờ': 'o', 'ớ': 'o', 'ở': 'o', 'ỡ': 'o', 'ợ': 'o',
+  'ồ': 'o', 'ố': 'o', 'ổ': 'o', 'ỗ': 'o', 'ộ': 'o',
+  'ù': 'u', 'ú': 'u', 'û': 'u', 'ủ': 'u', 'ụ': 'u',
+  'ư': 'u', 'ừ': 'u', 'ứ': 'u', 'ử': 'u', 'ữ': 'u', 'ự': 'u',
+  'ỳ': 'y', 'ý': 'y', 'ỵ': 'y', 'ỷ': 'y', 'ỹ': 'y',
+  'đ': 'd',
+};
+
+/// Tên cửa hàng -> slug viết thường không dấu, chỉ chữ + số
+/// (vd "Rybna" -> "rybna", "Cửa Hàng A" -> "cuahanga").
+/// Dùng trong email/mật khẩu tài khoản Firebase của cửa hàng.
+String storeSlug(String storeName) {
+  final lower = storeName.toLowerCase();
+  final buf = StringBuffer();
+  for (final ch in lower.split('')) {
+    final mapped = _viDiacritics[ch];
+    if (mapped != null) {
+      buf.write(mapped);
+    } else if (RegExp(r'[a-z0-9]').hasMatch(ch)) {
+      buf.write(ch);
+    }
+  }
+  return buf.toString();
+}
+
+/// Email tài khoản Firebase Auth theo vai trò:
+/// cửa hàng -> store-<slug>@gio-lam.local; chủ -> owner@gio-lam.local;
+/// admin -> admin@gio-lam.local.
+String accountEmail(String role, String storeId) {
+  if (role == 'owner') return 'owner@gio-lam.local';
+  if (role == 'admin') return 'admin@gio-lam.local';
+  return 'store-${storeSlug(storeId)}@gio-lam.local';
+}
+
+/// Mật khẩu tài khoản Firebase Auth suy ra từ vai trò + PIN
+/// (luôn >= 6 ký tự theo yêu cầu của Firebase Auth).
+String accountPassword(String role, String storeId, String pin) {
+  if (role == 'owner') return 'gio-lam-owner-$pin';
+  if (role == 'admin') return 'gio-lam-admin-$pin';
+  return 'gio-lam-${storeSlug(storeId)}-$pin';
+}
+
+/// Tìm vai trò từ mã PIN nhập vào, dựa trên hash đã lưu trong
+/// pins/config: trả về (role, storeId) — storeId '*' với chủ/admin —
+/// hoặc null nếu PIN không khớp cái nào. PIN chủ/admin được kiểm tra
+/// TRƯỚC nên nếu trùng hash thì quyền cao hơn thắng.
+({String role, String storeId})? resolvePinRole(
+    Map<String, String> storePins,
+    String? ownerPinHash,
+    String? adminPinHash,
+    String pin) {
+  final h = pinHash(pin);
+  if (adminPinHash != null && h == adminPinHash) {
+    return (role: 'admin', storeId: '*');
+  }
+  if (ownerPinHash != null && h == ownerPinHash) {
+    return (role: 'owner', storeId: '*');
+  }
+  for (final entry in storePins.entries) {
+    if (h == entry.value) return (role: 'store', storeId: entry.key);
+  }
+  return null;
 }

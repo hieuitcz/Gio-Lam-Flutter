@@ -263,4 +263,69 @@ void main() {
     expect(shouldApplyRemote(1, 0), isTrue);
   });
 
+  test('ma PIN: dinh dang 4-6 chu so', () {
+    expect(isValidPin('1234'), isTrue);
+    expect(isValidPin('123456'), isTrue);
+    expect(isValidPin('123'), isFalse);
+    expect(isValidPin('1234567'), isFalse);
+    expect(isValidPin('12a4'), isFalse);
+    expect(isValidPin(''), isFalse);
+  });
+
+  test('ma PIN: hash on dinh, khac nhau theo PIN', () {
+    expect(pinHash('1234'), pinHash('1234'));
+    expect(pinHash('1234').length, 64);
+    expect(pinHash('1234') == pinHash('4321'), isFalse);
+    expect(pinHash('1234'), isNot('1234'));
+  });
+
+  test('ma PIN: slug bo dau tieng Viet', () {
+    expect(storeSlug('Rybna'), 'rybna');
+    expect(storeSlug('Cửa Hàng A'), 'cuahanga');
+    expect(storeSlug('Phở 24h'), 'pho24h');
+    expect(storeSlug('HTHSHOP'), 'hthshop');
+  });
+
+  test('ma PIN: email + mat khau suy ra theo vai tro', () {
+    expect(accountEmail('store', 'Rybna'), 'store-rybna@gio-lam.local');
+    expect(accountEmail('store', 'Cửa Hàng A'),
+        'store-cuahanga@gio-lam.local');
+    expect(accountEmail('owner', '*'), 'owner@gio-lam.local');
+    expect(accountEmail('admin', '*'), 'admin@gio-lam.local');
+    // Mat khau luon >= 6 ky tu (yeu cau cua Firebase Auth).
+    expect(accountPassword('store', 'Rybna', '1234').length,
+        greaterThanOrEqualTo(6));
+    expect(accountPassword('owner', '*', '1234'), 'gio-lam-owner-1234');
+    expect(accountPassword('admin', '*', '1234'), 'gio-lam-admin-1234');
+    // Khac cua hang / khac PIN thi mat khau khac nhau.
+    expect(accountPassword('store', 'Rybna', '1234') ==
+        accountPassword('store', 'Hoan', '1234'), isFalse);
+    expect(accountPassword('store', 'Rybna', '1234') ==
+        accountPassword('store', 'Rybna', '4321'), isFalse);
+  });
+
+  test('ma PIN: map PIN -> vai tro (admin truoc, chu sau, roi cua hang)',
+      () {
+    final stores = {
+      'Rybna': pinHash('1111'),
+      'Hoan': pinHash('2222'),
+    };
+    final owner = pinHash('3333');
+    final admin = pinHash('4444');
+    expect(resolvePinRole(stores, owner, admin, '1111'),
+        (role: 'store', storeId: 'Rybna'));
+    expect(resolvePinRole(stores, owner, admin, '2222'),
+        (role: 'store', storeId: 'Hoan'));
+    expect(
+        resolvePinRole(stores, owner, admin, '3333'),
+        (role: 'owner', storeId: '*'));
+    expect(
+        resolvePinRole(stores, owner, admin, '4444'),
+        (role: 'admin', storeId: '*'));
+    expect(resolvePinRole(stores, owner, admin, '9999'), isNull);
+    // PIN trung hash giua cua hang va admin thi quyen cao hon thang.
+    expect(resolvePinRole({'Rybna': pinHash('4444')}, owner, admin, '4444'),
+        (role: 'admin', storeId: '*'));
+  });
+
 }

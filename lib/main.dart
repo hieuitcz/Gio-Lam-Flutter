@@ -160,13 +160,15 @@ class _HomePageState extends State<HomePage>
   String? _lastPdfPath;
   // Điều khiển hiệu ứng nhấp nháy của nút ⓘ hỗ trợ.
   late final AnimationController _pulseCtrl;
-  // Đồng bộ cloud: true = đang hiện màn hình đăng nhập Firebase
+  // Đồng bộ cloud: true = đang hiện màn hình nhập mã PIN
   // (chưa có tài khoản đăng nhập). false = vào app bình thường.
   bool _showCloudLogin = false;
+  // true = màn hình đặt mã PIN admin lần đầu (chưa có pins/config).
+  bool _pinSetupMode = false;
   // Đang đăng nhập / đổi cửa hàng trên cloud (khóa nút lúc chờ).
   bool _cloudBusy = false;
-  final _cloudEmailCtrl = TextEditingController();
-  final _cloudPwCtrl = TextEditingController();
+  final _pinCtrl = TextEditingController();
+  final _pinCtrl2 = TextEditingController();
 
   @override
   void initState() {
@@ -203,8 +205,8 @@ class _HomePageState extends State<HomePage>
   @override
   void dispose() {
     _pulseCtrl.dispose();
-    _cloudEmailCtrl.dispose();
-    _cloudPwCtrl.dispose();
+    _pinCtrl.dispose();
+    _pinCtrl2.dispose();
     super.dispose();
   }
 
@@ -551,6 +553,7 @@ class _HomePageState extends State<HomePage>
                           tint: iosIndigo,
                           title: 'Chấm công',
                           bullets: const [
+                            'Mở app: nhập mã PIN của cửa hàng (do chủ cấp).',
                             'Đến làm: chọn tên mình rồi bấm Vào ca.',
                             'Về: bấm Tan ca. Quên bấm thì nhập tay giờ ra trong ngày.',
                             'Chạy đi cửa hàng khác rồi quay lại: tan ca rồi bấm Vào ca lại, 1 ngày chấm được nhiều lần.',
@@ -694,23 +697,54 @@ class _HomePageState extends State<HomePage>
     }
   }
 
-  // --- Đồng bộ cloud (Firebase) ---------------------------------------
+  // --- Đồng bộ cloud (Firebase) + mã PIN ------------------------------
   // Chạy lúc mở app: Firebase chưa khởi tạo được thì bỏ qua, chạy
-  // offline hoàn toàn; chưa đăng nhập thì hiện màn hình đăng nhập.
+  // offline hoàn toàn; chưa đăng nhập thì hiện màn hình nhập mã PIN.
+  // Chưa có mã PIN nào (pins/config chưa tồn tại) thì hiện màn hình
+  // đặt mã PIN admin lần đầu. Mất mạng (không tải được pins/config)
+  // thì hiện màn hình nhập PIN thường, bấm Vào sẽ báo mất mạng.
   Future<void> _cloudInit() async {
     if (!cloudSync.firebaseReady) return;
-    if (!cloudSync.signedIn) {
-      if (mounted) setState(() => _showCloudLogin = true);
+    final cfg = await cloudSync.fetchPinConfig();
+    if (cloudSync.signedIn) {
+      // Bản cũ đăng nhập bằng email: coi như admin, cho đặt PIN luôn
+      // nếu chưa có PIN nào; đã có PIN thì vào app bình thường.
+      if (cfg == null && !cloudSync.pinFetchFailed) {
+        if (mounted) {
+          setState(() {
+            _showCloudLogin = true;
+            _pinSetupMode = true;
+          });
+        }
+        return;
+      }
+      await _afterCloudSignIn();
       return;
     }
-    await _afterCloudSignIn();
+    if (cfg == null && !cloudSync.pinFetchFailed) {
+      if (mounted) {
+        setState(() {
+          _showCloudLogin = true;
+          _pinSetupMode = true;
+        });
+      }
+      return;
+    }
+    if (mounted) setState(() => _showCloudLogin = true);
   }
 
-  // Sau khi đăng nhập cloud (lúc mở app hoặc đăng nhập tay): tải quyền
+  // Sau khi đăng nhập cloud (lúc mở app hoặc nhập PIN): tải quyền
   // xem (users/{uid}), xử lý máy cửa hàng giữ sai cửa hàng, liệt kê
-  // các cửa hàng, rồi đồng bộ dữ liệu mới nhất về.
+  // các cửa hàng, rồi đồng bộ dữ liệu mới nhất về. Vai trò local
+  // (Ctrl+H) đi theo vai trò cloud: PIN chủ/admin thì mở luôn quyền
+  // chủ/admin trên máy này; PIN cửa hàng thì ở vai trò nhân viên.
   Future<void> _afterCloudSignIn() async {
     await cloudSync.loadUserProfile(_s.data.storeName);
+    _role = cloudSync.cloudRole == 'admin'
+        ? 'admin'
+        : cloudSync.cloudRole == 'owner'
+            ? 'owner'
+            : 'employee';
     // Tài khoản cửa hàng: máy chỉ được giữ đúng cửa hàng của tài khoản.
     if (cloudSync.cloudRole == 'store' &&
         cloudSync.cloudStoreId != null &&
@@ -745,29 +779,75 @@ class _HomePageState extends State<HomePage>
     if (changed) _snack('Đã đồng bộ dữ liệu mới nhất từ cloud.');
   }
 
-  // Đăng nhập cloud bằng email/mật khẩu (tài khoản admin tạo trong
-  // Firebase Console). Sai mật khẩu/mất mạng thì báo lỗi, không kẹt.
-  Future<void> _cloudLogin() async {
-    final email = _cloudEmailCtrl.text.trim();
-    final pw = _cloudPwCtrl.text;
-    if (email.isEmpty || pw.isEmpty) {
-      _snack('Nhập email và mật khẩu đồng bộ.');
+  // Đăng nhập cloud bằng mã PIN (thay cho email/mật khẩu): PIN khớp
+  // hash trong pins/config thì đăng nhập bằng tài khoản Firebase suy
+  // ra từ PIN. Sai PIN / mất mạng thì báo lỗi, không kẹt.
+  Future<void> _pinLogin() async {
+    final pin = _pinCtrl.text.trim();
+    if (!isValidPin(pin)) {
+      _snack('Mã PIN gồm 4-6 chữ số.');
       return;
     }
     setState(() => _cloudBusy = true);
     try {
-      await cloudSync.signIn(email, pw);
+      await cloudSync.signInWithPin(pin);
       await _afterCloudSignIn();
       if (!mounted) return;
       setState(() {
         _showCloudLogin = false;
         _cloudBusy = false;
+        _pinCtrl.clear();
       });
-      _snack('Đã đăng nhập đồng bộ (${cloudSync.currentEmail}).');
+      _snack(cloudSync.cloudRole == 'admin'
+          ? 'Đã vào bằng mã PIN admin.'
+          : cloudSync.cloudRole == 'owner'
+              ? 'Đã vào bằng mã PIN chủ.'
+              : 'Đã vào cửa hàng ${cloudSync.cloudStoreId ?? _s.data.storeName}.');
+    } on StateError catch (e) {
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      _snack(e.message);
     } catch (_) {
       if (!mounted) return;
       setState(() => _cloudBusy = false);
-      _snack('Đăng nhập lỗi: kiểm tra lại email/mật khẩu hoặc mạng.');
+      _snack('Mất mạng, thử lại sau.');
+    }
+  }
+
+  // Đặt mã PIN admin lần đầu (chưa có mã PIN nào): người mở app đầu
+  // tiên làm việc này, nhập 2 lần rồi vào luôn với vai trò admin.
+  Future<void> _pinSetup() async {
+    final pin = _pinCtrl.text.trim();
+    final pin2 = _pinCtrl2.text.trim();
+    if (!isValidPin(pin)) {
+      _snack('Mã PIN gồm 4-6 chữ số.');
+      return;
+    }
+    if (pin != pin2) {
+      _snack('Hai lần nhập không khớp.');
+      return;
+    }
+    setState(() => _cloudBusy = true);
+    try {
+      await cloudSync.setupAdminPin(pin);
+      await _afterCloudSignIn();
+      if (!mounted) return;
+      setState(() {
+        _showCloudLogin = false;
+        _cloudBusy = false;
+        _pinSetupMode = false;
+        _pinCtrl.clear();
+        _pinCtrl2.clear();
+      });
+      _snack('Đã đặt mã PIN admin. Giữ kỹ mã PIN này.');
+    } on StateError catch (e) {
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      _snack(e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      _snack('Mất mạng, thử lại sau.');
     }
   }
 
@@ -826,10 +906,197 @@ class _HomePageState extends State<HomePage>
     _snack('Đang xem cửa hàng $storeId.');
   }
 
-  // Màn hình đăng nhập đồng bộ: hiện khi Firebase khởi tạo được mà
-  // chưa có tài khoản đăng nhập. Có nút "Dùng offline" để máy chưa
-  // có tài khoản vẫn dùng được bình thường (lần mở sau hỏi lại).
+  // --- Chủ tự quản lý cửa hàng (chỉ chủ/admin) ------------------------
+  // Chủ thêm cửa hàng + mã PIN trong app, rồi gửi bộ cài app cho cửa
+  // hàng đó; cửa hàng nhập PIN là vào đúng cửa hàng của mình.
+  Future<void> _addStore() async {
+    if (!cloudSync.available || !cloudSync.canPickStore) {
+      _snack('Chưa đăng nhập chủ/admin.');
+      return;
+    }
+    final nameCtrl = TextEditingController();
+    final pinCtrl = TextEditingController();
+    final pin2Ctrl = TextEditingController();
+    final ok = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Thêm cửa hàng'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 12),
+          CupertinoTextField(
+              controller: nameCtrl, placeholder: 'Tên cửa hàng'),
+          const SizedBox(height: 8),
+          CupertinoTextField(
+              controller: pinCtrl,
+              placeholder: 'Mã PIN (4-6 chữ số)',
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 6),
+          const SizedBox(height: 8),
+          CupertinoTextField(
+              controller: pin2Ctrl,
+              placeholder: 'Nhập lại mã PIN',
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 6),
+        ]),
+        actions: [
+          CupertinoDialogAction(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Hủy')),
+          CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Thêm')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final name = nameCtrl.text.trim();
+    final pin = pinCtrl.text.trim();
+    if (name.isEmpty) {
+      _snack('Nhập tên cửa hàng.');
+      return;
+    }
+    if (!isValidPin(pin) || pin != pin2Ctrl.text.trim()) {
+      _snack('Mã PIN gồm 4-6 chữ số và 2 lần nhập phải khớp.');
+      return;
+    }
+    setState(() => _cloudBusy = true);
+    try {
+      await cloudSync.createStore(name, pin);
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      // Hiện mã PIN 1 lần để chủ báo cho cửa hàng (sau này không
+      // hiện lại được vì chỉ lưu hash).
+      await showCupertinoDialog(
+        context: context,
+        builder: (ctx) => CupertinoAlertDialog(
+          title: Text('Đã thêm cửa hàng $name'),
+          content: Text(
+              'Mã PIN của cửa hàng là: $pin\nBáo mã này cho cửa hàng. '
+              'Mã PIN chỉ hiện 1 lần này, sau này không xem lại được.'),
+          actions: [
+            CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Đã ghi nhớ')),
+          ],
+        ),
+      );
+    } on StateError catch (e) {
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      _snack(e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      _snack('Mất mạng, thử lại sau.');
+    }
+  }
+
+  // Xóa cửa hàng (chỉ chủ/admin): xóa dữ liệu cloud + quyền xem +
+  // mã PIN của cửa hàng đó. Không xóa được cửa hàng đang xem (đổi
+  // sang cửa hàng khác trước) để dữ liệu local không đẩy lại lên
+  // cloud làm cửa hàng sống lại.
+  Future<void> _deleteStore(String storeName) async {
+    if (!cloudSync.available || !cloudSync.canPickStore) {
+      _snack('Chưa đăng nhập chủ/admin.');
+      return;
+    }
+    if (storeName == _s.data.storeName) {
+      _snack('Không xóa được cửa hàng đang xem — đổi sang cửa hàng khác trước.');
+      return;
+    }
+    final ok = await _confirm('Xóa cửa hàng',
+        'Xóa cửa hàng $storeName cùng toàn bộ dữ liệu chấm công và mã PIN của nó?');
+    if (!ok) return;
+    setState(() => _cloudBusy = true);
+    try {
+      await cloudSync.deleteStore(storeName);
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      _snack('Đã xóa cửa hàng $storeName.');
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      _snack('Mất mạng, thử lại sau.');
+    }
+  }
+
+  // Admin ĐẶT/ĐỔI mã PIN chủ hoặc mã PIN admin (mục Quản trị).
+  // Đổi mã PIN admin xong thì phiên admin hiện tại mất quyền nên phải
+  // đăng xuất rồi đăng nhập lại bằng PIN mới.
+  Future<void> _setRolePin(String kind) async {
+    final title = kind == 'owner' ? 'mã PIN chủ' : 'mã PIN admin';
+    final pinCtrl = TextEditingController();
+    final pin2Ctrl = TextEditingController();
+    final ok = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: Text('Đặt $title'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 12),
+          CupertinoTextField(
+              controller: pinCtrl,
+              placeholder: '$title mới (4-6 chữ số)',
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 6),
+          const SizedBox(height: 8),
+          CupertinoTextField(
+              controller: pin2Ctrl,
+              placeholder: 'Nhập lại $title',
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 6),
+        ]),
+        actions: [
+          CupertinoDialogAction(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Hủy')),
+          CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Lưu')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final pin = pinCtrl.text.trim();
+    if (!isValidPin(pin) || pin != pin2Ctrl.text.trim()) {
+      _snack('Mã PIN gồm 4-6 chữ số và 2 lần nhập phải khớp.');
+      return;
+    }
+    setState(() => _cloudBusy = true);
+    try {
+      await cloudSync.setRolePin(kind, pin);
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      if (kind == 'admin') {
+        _snack('Đã đổi mã PIN admin. Đăng nhập lại bằng mã PIN mới.');
+        await _cloudSignOut();
+      } else {
+        _snack('Đã đặt $title. Báo mã này cho chủ cửa hàng.');
+      }
+    } on StateError catch (e) {
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      _snack(e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      _snack('Mất mạng, thử lại sau.');
+    }
+  }
+
+  // Màn hình nhập mã PIN: hiện khi Firebase khởi tạo được mà chưa
+  // có tài khoản đăng nhập. PIN cửa hàng chỉ hiện đúng cửa hàng đó;
+  // PIN chủ/admin thì xem được hết. Có nút "Dùng offline" để máy
+  // chưa có PIN vẫn dùng được bình thường (lần mở sau hỏi lại).
+  // Chưa có mã PIN nào thì hiện màn hình đặt mã PIN admin lần đầu.
   Widget _cloudLoginScreen() {
+    final setup = _pinSetupMode;
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -852,45 +1119,62 @@ class _HomePageState extends State<HomePage>
                 ),
               ),
               const SizedBox(height: 16),
-              const Text('Đăng nhập đồng bộ',
+              Text(setup ? 'Đặt mã PIN admin' : 'Nhập mã PIN',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
                       color: _ink)),
               const SizedBox(height: 8),
-              const Text(
-                'Nhập tài khoản đồng bộ do admin tạo trong Firebase Console (1 tài khoản cho mỗi cửa hàng; tài khoản admin xem được hết các cửa hàng). Mất mạng vẫn dùng được offline.',
+              Text(
+                setup
+                    ? 'Chưa có mã PIN nào. Người mở app đầu tiên đặt mã PIN admin (4-6 chữ số) — mã này mở được tất cả các cửa hàng. Giữ kỹ mã PIN này.'
+                    : 'Nhập mã PIN của cửa hàng (do chủ cấp) để vào đúng cửa hàng đó. Mã PIN chủ/admin thì xem được hết các cửa hàng. Mất mạng vẫn dùng được offline.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: _muted, fontSize: 14),
+                style: const TextStyle(color: _muted, fontSize: 14),
               ),
               const SizedBox(height: 24),
               CupertinoTextField(
-                controller: _cloudEmailCtrl,
-                placeholder: 'Email đồng bộ',
-                keyboardType: TextInputType.emailAddress,
-                decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12)),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              ),
-              const SizedBox(height: 12),
-              CupertinoTextField(
-                controller: _cloudPwCtrl,
-                placeholder: 'Mật khẩu',
+                controller: _pinCtrl,
+                placeholder: setup ? 'Mã PIN admin mới' : 'Mã PIN',
+                keyboardType: TextInputType.number,
                 obscureText: true,
-                onSubmitted: (_) => _cloudLogin(),
+                maxLength: 6,
+                onSubmitted: (_) => setup ? _pinSetup() : _pinLogin(),
                 decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12)),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               ),
+              if (setup) ...[
+                const SizedBox(height: 12),
+                CupertinoTextField(
+                  controller: _pinCtrl2,
+                  placeholder: 'Nhập lại mã PIN admin',
+                  keyboardType: TextInputType.number,
+                  obscureText: true,
+                  maxLength: 6,
+                  onSubmitted: (_) => _pinSetup(),
+                  decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 12),
+                ),
+              ],
               const SizedBox(height: 20),
               PrimaryButton(
-                label: _cloudBusy ? 'Đang đăng nhập…' : 'Đăng nhập',
-                onPressed: _cloudBusy ? null : _cloudLogin,
+                label: _cloudBusy
+                    ? 'Đang kiểm tra…'
+                    : setup
+                        ? 'Đặt mã PIN'
+                        : 'Vào',
+                onPressed: _cloudBusy
+                    ? null
+                    : setup
+                        ? _pinSetup
+                        : _pinLogin,
               ),
               const SizedBox(height: 8),
               TextButton(
@@ -1722,8 +2006,8 @@ class _HomePageState extends State<HomePage>
 
   @override
   Widget build(BuildContext context) {
-    // Chưa đăng nhập đồng bộ (Firebase bật mà chưa có tài khoản):
-    // hiện màn hình đăng nhập thay cho các tab.
+    // Chưa nhập mã PIN (Firebase bật mà chưa có tài khoản):
+    // hiện màn hình nhập PIN thay cho các tab.
     if (_showCloudLogin) {
       return Scaffold(body: SafeArea(child: _cloudLoginScreen()));
     }
@@ -2312,6 +2596,55 @@ class _HomePageState extends State<HomePage>
             ),
           ),
           const SizedBox(height: 20),
+          const AppSectionHeader(icon: Icons.store, title: 'Cửa hàng'),
+          const SizedBox(height: 8),
+          AppCard(
+            padding: EdgeInsets.zero,
+            child: Column(children: [
+              if (!cloudSync.available) ...[
+                const ListTile(
+                  leading: IconTile(icon: Icons.cloud_off, tint: _muted),
+                  title: Text('Chưa đăng nhập đồng bộ'),
+                  subtitle: Text(
+                      'Nhập mã PIN để đồng bộ rồi mới thêm/xóa cửa hàng được.'),
+                ),
+              ] else ...[
+                for (final id in cloudSync.storeIds) ...[
+                  ListTile(
+                    leading: const IconTile(
+                        icon: Icons.store, tint: _teal),
+                    title: Text(id,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, color: _ink)),
+                    subtitle: Text(id == data.storeName
+                        ? 'Đang xem cửa hàng này'
+                        : 'Bấm để xem cửa hàng này'),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete,
+                          size: 18, color: _danger),
+                      onPressed: _cloudBusy
+                          ? null
+                          : () => _deleteStore(id),
+                    ),
+                    onTap: _cloudBusy
+                        ? null
+                        : () => _switchStore(id),
+                  ),
+                  const Divider(height: 1, color: _line),
+                ],
+                ListTile(
+                  leading: const IconTile(
+                      icon: Icons.add_circle, tint: _accent),
+                  title: const Text('Thêm cửa hàng',
+                      style: TextStyle(color: _accentDark)),
+                  subtitle: const Text(
+                      'Đặt tên + mã PIN, rồi gửi bộ cài app cho cửa hàng đó'),
+                  onTap: _cloudBusy ? null : _addStore,
+                ),
+              ],
+            ]),
+          ),
+          const SizedBox(height: 20),
           const AppSectionHeader(icon: Icons.palette, title: 'Giao diện'),
           const SizedBox(height: 8),
           _card(
@@ -2500,13 +2833,13 @@ class _HomePageState extends State<HomePage>
               ListTile(
                 leading: const IconTile(icon: Icons.cloud, tint: _accent),
                 title: Text(cloudSync.signedIn
-                    ? 'Đã đăng nhập: ${cloudSync.currentEmail}'
+                    ? 'Đã vào bằng mã PIN: ${cloudSync.cloudRole == 'admin' ? 'admin (xem được hết)' : cloudSync.cloudRole == 'owner' ? 'chủ (xem được hết)' : 'cửa hàng ${cloudSync.cloudStoreId ?? _s.data.storeName}'}'
                     : cloudSync.firebaseReady
-                        ? 'Chưa đăng nhập đồng bộ'
+                        ? 'Chưa nhập mã PIN'
                         : 'Chưa bật đồng bộ (mất mạng hoặc chưa cấu hình)'),
                 subtitle: Text(cloudSync.signedIn
                     ? 'Quyền: ${cloudSync.cloudRole ?? 'store'} · ${cloudSync.cloudStoreId == '*' ? 'xem được hết các cửa hàng' : 'cửa hàng ${cloudSync.cloudStoreId ?? _s.data.storeName}'}'
-                    : 'Dữ liệu vẫn lưu local trên máy, có mạng đăng nhập lại để đồng bộ.'),
+                    : 'Dữ liệu vẫn lưu local trên máy, có mạng nhập mã PIN lại để đồng bộ.'),
               ),
               if (cloudSync.lastSyncTime != null) ...[
                 const Divider(height: 1, color: _line),
@@ -2535,7 +2868,7 @@ class _HomePageState extends State<HomePage>
                 ListTile(
                   leading:
                       const IconTile(icon: Icons.logout, tint: _danger),
-                  title: const Text('Đăng xuất đồng bộ',
+                  title: const Text('Đăng xuất (nhập lại mã PIN)',
                       style: TextStyle(color: _danger)),
                   subtitle: const Text(
                       'Dữ liệu local trên máy vẫn giữ nguyên'),
@@ -2655,6 +2988,37 @@ class _HomePageState extends State<HomePage>
                   trailing: const Icon(Icons.chevron_right,
                       size: 16, color: _muted),
                   onTap: _resetOwnerPassword,
+                ),
+                const Divider(height: 1, color: _line),
+                ListTile(
+                  leading: const IconTile(
+                      icon: Icons.pin, tint: _accent),
+                  title: const Text('Đặt/đổi mã PIN chủ'),
+                  subtitle: const Text(
+                      'Mã PIN đăng nhập cloud của chủ cửa hàng'),
+                  trailing: const Icon(Icons.chevron_right,
+                      size: 16, color: _muted),
+                  onTap: _cloudBusy ? null : () => _setRolePin('owner'),
+                ),
+                const Divider(height: 1, color: _line),
+                ListTile(
+                  leading: const IconTile(
+                      icon: Icons.pin, tint: _accent),
+                  title: const Text('Đổi mã PIN admin'),
+                  subtitle: const Text(
+                      'Đổi xong phải đăng nhập lại bằng mã PIN mới'),
+                  trailing: const Icon(Icons.chevron_right,
+                      size: 16, color: _muted),
+                  onTap: _cloudBusy ? null : () => _setRolePin('admin'),
+                ),
+                const Divider(height: 1, color: _line),
+                const ListTile(
+                  leading: IconTile(
+                      icon: Icons.info, tint: _muted),
+                  title: Text(
+                      'Mã PIN cloud khác mật khẩu tổng local (Ctrl+H): PIN để vào app + đồng bộ, mật khẩu tổng để mở chế độ admin trên máy này kể cả khi mất mạng.'),
+                  subtitle: Text(
+                      'Đổi mã PIN cửa hàng chưa có ở bản này — chủ tạo lại cửa hàng mới rồi xóa cửa hàng cũ nếu cần đổi PIN.'),
                 ),
                 const Divider(height: 1, color: _line),
                 ListTile(

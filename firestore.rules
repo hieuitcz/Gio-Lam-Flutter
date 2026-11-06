@@ -1,32 +1,68 @@
-// Đồng bộ cloud Gio-Lam (project gio-lam).
+// Đồng bộ cloud Gio-Lam (project gio-lam) + đăng nhập bằng mã PIN.
 // Dán vào Firebase Console > Firestore Database > Rules rồi bấm Publish.
 //
-// - Chỉ tài khoản đã đăng nhập mới đọc/ghi.
-// - Doc users/{uid} do admin tạo trong Console (xem mục "Đồng bộ cloud
-//   (Firebase)" trong README.md), chỉ chính chủ mới đọc, không ai ghi
-//   được từ app (ghi từ Console).
+// LƯU Ý: trình duyệt đã dán bản rules CŨ (chỉ đồng bộ, chưa có pins)
+// vào Console ngày 2026-11-06. Sau khi push bản này thì dán LẠI
+// bản rules mới này (có thêm collection `pins` + cho chủ/admin tạo
+// doc users) thì chủ mới thêm được cửa hàng trong app.
+//
+// - Mã PIN: hash PIN lưu công khai trong doc `pins/config` để app
+//   kiểm tra PIN khi đăng nhập (đọc công khai, ghi chỉ chủ/admin).
+//   PIN ngắn (4-6 số) + hash công khai nên PIN chỉ ngăn người tò mò
+//   xem nhầm cửa hàng, không chống được người cố tình dò.
+// - Doc users/{uid} do chủ/admin tạo trong app (khi thêm cửa hàng
+//   hoặc đặt mã PIN) hoặc trong Console; user thường chỉ đọc doc
+//   của chính mình, không ghi.
+// - Bootstrap: khi chưa có doc pins/config (mới cài, chưa ai đặt mã
+//   PIN admin) thì user đã đăng nhập được tự tạo doc users của mình
+//   và ghi pins/config 1 lần để đặt mã PIN admin đầu tiên. Sau khi
+//   pins/config đã có thì cửa này đóng lại, chỉ chủ/admin mới ghi.
 // - Doc stores/{storeId}: được đọc/ghi khi users/{uid}.storeId trùng
 //   với storeId, hoặc bằng '*' (chủ cửa hàng/admin xem được hết).
 // - Chưa có doc users/{uid} thì tài khoản đó không đọc/ghi được gì
-//   trên cloud (app vẫn chạy offline bình thường) — admin phải tạo
-//   doc users/{uid} cho tài khoản đó trước.
+//   trên cloud (app vẫn chạy offline bình thường).
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    function userDoc() {
+    function callerDoc() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isOwnerOrAdmin() {
+      return request.auth != null &&
+          (callerDoc().data.role == 'owner' ||
+              callerDoc().data.role == 'admin');
     }
 
     function canAccess(storeId) {
       return request.auth != null &&
-          (userDoc().data.storeId == storeId ||
-              userDoc().data.storeId == '*');
+          (callerDoc().data.storeId == storeId ||
+              callerDoc().data.storeId == '*');
     }
 
     match /users/{uid} {
+      // Chủ/admin đọc được tất cả (để tìm tài khoản cũ khi đổi PIN);
+      // user thường chỉ đọc doc của chính mình.
       allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if false;
+      allow read: if isOwnerOrAdmin();
+      // Bootstrap: chưa có pins/config thì user tự tạo doc của mình
+      // (lần đầu đặt mã PIN admin). Sau đó chỉ chủ/admin tạo.
+      allow create: if request.auth != null &&
+          request.auth.uid == uid &&
+          !exists(/databases/$(database)/documents/pins/config);
+      allow create: if request.auth != null && isOwnerOrAdmin();
+      allow update, delete: if isOwnerOrAdmin();
+    }
+
+    match /pins/{doc} {
+      // Hash mã PIN đọc công khai để app kiểm tra PIN khi đăng nhập.
+      allow read: if true;
+      // Bootstrap: chưa có pins/config thì user đã đăng nhập được
+      // ghi 1 lần (đặt mã PIN admin đầu tiên). Sau đó chỉ chủ/admin.
+      allow write: if request.auth != null &&
+          !exists(/databases/$(database)/documents/pins/config);
+      allow write: if isOwnerOrAdmin();
     }
 
     match /stores/{storeId} {

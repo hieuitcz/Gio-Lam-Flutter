@@ -20,6 +20,11 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: flutter build windows --release
+      - name: Build installer (Inno Setup)
+        run: |
+          choco install innosetup -y
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+          Copy-Item installer-output\ChamCongHTHSHOP-Setup.exe ChamCongHTHSHOP-Setup-windows-${{ github.run_number }}.exe
       - name: Zip the Windows bundle
         run: |
           Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath gio-lam-windows.zip
@@ -27,8 +32,14 @@ jobs:
         with:
           name: gio-lam-windows
           path: gio-lam-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ChamCongHTHSHOP-Setup
+          path: ChamCongHTHSHOP-Setup-windows-${{ github.run_number }}.exe
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: windows-${{ github.run_number }}
           name: Gio-Lam Windows build ${{ github.run_number }}
-          files: gio-lam-windows.zip
+          files: |
+            gio-lam-windows.zip
+            ChamCongHTHSHOP-Setup-windows-${{ github.run_number }}.exe

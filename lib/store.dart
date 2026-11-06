@@ -509,8 +509,9 @@ class DataStore {
           'Chỉ nhập tay được trong đúng ngày hôm đó, không nhập ngày cũ được.');
     }
     final minutes = parseHhmm(hhmm);
-    if (minutes == null)
+    if (minutes == null) {
       throw StateError('Giờ sai định dạng. Nhập dạng 9:00 hoặc 20:00.');
+    }
     if (data.openShift(emp) != null) throw StateError('Ca trước chưa tan ca.');
     // Nhập tay tạo thêm 1 đoạn ca mới trong ngày (không ghi đè đoạn cũ).
     (data.shifts[emp] ??= []).add(Shift(day, clockIn: minutes, inManual: true));
@@ -524,11 +525,13 @@ class DataStore {
           'Chỉ nhập tay được trong đúng ngày hôm đó, không nhập ngày cũ được.');
     }
     final minutes = parseHhmm(hhmm);
-    if (minutes == null)
+    if (minutes == null) {
       throw StateError('Giờ sai định dạng. Nhập dạng 9:00 hoặc 20:00.');
+    }
     final shift = data.openShift(emp);
-    if (shift == null)
+    if (shift == null) {
       throw StateError('Chưa vào ca nên không nhập giờ ra được.');
+    }
     final start = DateTime.parse(shift.date);
     if (now.difference(start).inDays > 1) {
       throw StateError('Ca này đã quá 1 ngày. Nhờ chủ cửa hàng sửa.');

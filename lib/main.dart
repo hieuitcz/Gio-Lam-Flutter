@@ -1423,7 +1423,8 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  Future<bool> _confirm(String title, String message) async {
+  Future<bool> _confirm(String title, String message,
+      {String confirmLabel = 'Xóa', bool destructive = true}) async {
     final ok = await showCupertinoDialog<bool>(
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
@@ -1434,9 +1435,10 @@ class _HomePageState extends State<HomePage>
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Hủy')),
           CupertinoDialogAction(
-              isDestructiveAction: true,
+              isDestructiveAction: destructive,
+              isDefaultAction: !destructive,
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Xóa')),
+              child: Text(confirmLabel)),
         ],
       ),
     );
@@ -2172,7 +2174,9 @@ class _HomePageState extends State<HomePage>
         move ? 'Chuyển cửa hàng' : 'Gán thêm cửa hàng',
         move
             ? 'Chuyển ${emp.name} cùng toàn bộ ca làm sang cửa hàng $target?'
-            : 'Gán ${emp.name} thêm vào cửa hàng $target? Người này vẫn ở cửa hàng ${_s.data.storeName}, giờ làm mỗi cửa hàng tính riêng.');
+            : 'Gán ${emp.name} thêm vào cửa hàng $target? Người này vẫn ở cửa hàng ${_s.data.storeName}, giờ làm mỗi cửa hàng tính riêng.',
+        confirmLabel: move ? 'Chuyển' : 'Thêm',
+        destructive: false);
     if (!ok) return;
     setState(() => _cloudBusy = true);
     try {

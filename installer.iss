@@ -26,9 +26,9 @@ ArchitecturesInstallIn64BitMode=x64
 PrivilegesRequired=lowest
 UninstallDisplayName={#MyAppName}
 WizardStyle=modern
-
-[Languages]
-Name: "vietnamese"; MessagesFile: "compiler:Languages\Vietnamese.isl"
+; Không dùng [Languages] tiếng Việt: Inno Setup 6 không kèm file
+; Vietnamese.isl nên biên dịch lỗi "Couldn't open include file".
+; Để wizard tiếng Anh mặc định cho chắc.
 
 [Files]
 Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

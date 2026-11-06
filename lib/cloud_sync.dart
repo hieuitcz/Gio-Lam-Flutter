@@ -18,10 +18,13 @@
 //   được tất cả cửa hàng. Chưa có doc users/{uid} thì mặc định chỉ
 //   xem cửa hàng local hiện tại (không chặn app, chỉ là chưa đồng bộ).
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'firebase_options.dart';
 import 'logic.dart';
@@ -39,12 +42,21 @@ bool shouldApplyRemote(int remoteUpdatedAt, int localCloudUpdatedAt) =>
 
 /// Cấu hình mã PIN lưu trong doc `pins/config` trên Firestore:
 /// `stores` = map tên cửa hàng -> hash SHA-256 của PIN cửa hàng đó;
-/// `ownerPinHash` / `adminPinHash` = hash PIN của chủ / admin.
+/// `ownerPinHash` / `adminPinHash` = hash PIN của chủ / admin;
+/// `storePinVersions` = map tên cửa hàng -> số phiên bản PIN (tăng
+/// mỗi lần chủ/admin đổi PIN cửa hàng đó; máy cửa hàng so số này
+/// với số đã lưu local để tự đăng xuất khi PIN bị đổi).
 class PinConfig {
   final Map<String, String> storePins;
   final String? ownerPinHash;
   final String? adminPinHash;
-  PinConfig({required this.storePins, this.ownerPinHash, this.adminPinHash});
+  final Map<String, int> storePinVersions;
+  PinConfig(
+      {required this.storePins,
+      this.ownerPinHash,
+      this.adminPinHash,
+      Map<String, int>? storePinVersions})
+      : storePinVersions = storePinVersions ?? {};
 
   factory PinConfig.fromDoc(Map<String, dynamic>? d) {
     final stores = <String, String>{};
@@ -54,10 +66,18 @@ class PinConfig {
         if (v is String) stores[k.toString()] = v;
       });
     }
+    final versions = <String, int>{};
+    final vm = d?['storePinVersions'];
+    if (vm is Map) {
+      vm.forEach((k, v) {
+        if (v is num) versions[k.toString()] = v.toInt();
+      });
+    }
     return PinConfig(
       storePins: stores,
       ownerPinHash: d?['ownerPinHash'] as String?,
       adminPinHash: d?['adminPinHash'] as String?,
+      storePinVersions: versions,
     );
   }
 }
@@ -114,6 +134,97 @@ class CloudSync {
     cloudRole = null;
     cloudStoreId = null;
     storeIds = [];
+  }
+
+  // --- Phiên bản mã PIN cửa hàng --------------------------------------
+  // Mỗi lần chủ/admin đổi PIN 1 cửa hàng, số phiên bản của cửa hàng đó
+  // trong pins/config tăng 1. Máy cửa hàng ghi lại số phiên bản lúc
+  // đăng nhập vào 1 file local (không đồng bộ lên cloud); lần mở app
+  // sau hoặc lúc đang chạy mà số trên cloud khác số local thì máy đó
+  // tự đăng xuất, phải nhập mã PIN mới. File local riêng để tránh
+  // AppData đã đồng bộ ghi đè nhầm (chủ xem cửa hàng rồi lưu lên
+  // cũng không làm sai lệch số này).
+  Future<File> _pinVersionFile() async {
+    final dir = await getApplicationSupportDirectory();
+    return File('${dir.path}/store-pin-version.json');
+  }
+
+  Future<int?> readLocalPinVersion(String storeId) async {
+    try {
+      final f = await _pinVersionFile();
+      if (!await f.exists()) return null;
+      final d = jsonDecode(await f.readAsString()) as Map<String, dynamic>;
+      if (d['storeId'] != storeId) return null;
+      return (d['version'] as num?)?.toInt();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _writeLocalPinVersion(String storeId, int version) async {
+    try {
+      final f = await _pinVersionFile();
+      await f
+          .writeAsString(jsonEncode({'storeId': storeId, 'version': version}));
+    } catch (_) {}
+  }
+
+  /// Số phiên bản PIN hiện tại của 1 cửa hàng trên cloud (không có
+  /// mục thì coi là 1 — phiên bản đầu tiên lúc tạo cửa hàng).
+  int cloudPinVersion(String storeId, [PinConfig? cfg]) =>
+      (cfg ?? pinConfig)?.storePinVersions[storeId] ?? 1;
+
+  /// Kiểm tra xem mã PIN của cửa hàng đang đăng nhập có bị chủ/admin
+  /// đổi không: so số phiên bản trên cloud với số đã lưu local. Nếu
+  /// khác thì đăng xuất luôn, trả về true. Chỉ áp dụng cho tài khoản
+  /// cửa hàng (chủ/admin không bị). Lần đầu chưa có số local thì
+  /// nhận số trên cloud, không đăng xuất.
+  Future<bool> signOutIfStorePinChanged({PinConfig? cfg}) async {
+    if (cloudRole != 'store' || cloudStoreId == null || cloudStoreId == '*') {
+      return false;
+    }
+    final storeId = cloudStoreId!;
+    final config = cfg ?? pinConfig ?? await fetchPinConfig();
+    if (config == null) return false;
+    final cloudVersion = cloudPinVersion(storeId, config);
+    final localVersion = await readLocalPinVersion(storeId);
+    if (localVersion == null) {
+      await _writeLocalPinVersion(storeId, cloudVersion);
+      return false;
+    }
+    if (localVersion == cloudVersion) return false;
+    await signOut();
+    return true;
+  }
+
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _pinConfigSub;
+
+  /// Theo dõi doc pins/config lúc app đang chạy: chủ/admin đổi PIN
+  /// cửa hàng thì máy cửa hàng đó tự đăng xuất ngay (không đợi mở
+  /// lại app). Chỉ chạy cho tài khoản cửa hàng; gọi lại sau mỗi lần
+  /// đăng nhập, dừng khi đăng xuất / đóng app.
+  void startPinChangeWatch({required void Function() onStorePinChanged}) {
+    stopPinChangeWatch();
+    if (cloudRole != 'store' || cloudStoreId == null || cloudStoreId == '*') {
+      return;
+    }
+    _pinConfigSub =
+        _db.collection('pins').doc('config').snapshots().listen((snap) async {
+      if (cloudRole != 'store') return;
+      final cfg = PinConfig.fromDoc(snap.data());
+      pinConfig = cfg;
+      if (await signOutIfStorePinChanged(cfg: cfg)) {
+        stopPinChangeWatch();
+        onStorePinChanged();
+      }
+    });
+  }
+
+  void stopPinChangeWatch() {
+    try {
+      _pinConfigSub?.cancel();
+    } catch (_) {}
+    _pinConfigSub = null;
   }
 
   // --- Mã PIN ----------------------------------------------------------
@@ -190,6 +301,12 @@ class CloudSync {
       } else {
         rethrow;
       }
+    }
+    // Tài khoản cửa hàng: ghi lại số phiên bản PIN lúc đăng nhập để
+    // lần sau phát hiện chủ đổi PIN rồi tự đăng xuất.
+    if (resolved.role == 'store') {
+      await _writeLocalPinVersion(
+          resolved.storeId, cloudPinVersion(resolved.storeId, cfg));
     }
   }
 
@@ -388,24 +505,31 @@ class CloudSync {
         email: email, password: pw, storeId: name, role: 'store');
     final seed = AppData(storeName: name, employees: []);
     final now = DateTime.now().millisecondsSinceEpoch;
+    // Lưu cả mã PIN lên doc stores/{tên} (field `pin`): chỉ cửa hàng
+    // đó + chủ/admin đọc được doc này theo Rules, nên chủ/admin xem
+    // lại được mã PIN cửa hàng; cửa hàng khác không đọc được. Không
+    // lưu PIN vào pins/config vì doc đó đọc công khai (để đăng nhập).
     await _db.collection('stores').doc(name).set({
       'data': seed.toJson(),
       'updatedAt': now,
       'updatedBy': _updatedBy(),
+      'pin': pin,
     }, SetOptions(merge: true)).timeout(_cloudTimeout);
     final hash = pinHash(pin);
     try {
-      await _db
-          .collection('pins')
-          .doc('config')
-          .update({'stores.$name': hash}).timeout(_cloudTimeout);
+      await _db.collection('pins').doc('config').update({
+        'stores.$name': hash,
+        'storePinVersions.$name': 1,
+      }).timeout(_cloudTimeout);
     } catch (_) {
       // pins/config chưa tồn tại (trường hợp hiếm): tạo mới kèm map.
       await _db.collection('pins').doc('config').set({
-        'stores': {name: hash}
+        'stores': {name: hash},
+        'storePinVersions': {name: 1},
       }, SetOptions(merge: true)).timeout(_cloudTimeout);
     }
     pinConfig?.storePins[name] = hash;
+    pinConfig?.storePinVersions[name] = 1;
     await fetchStoreIds();
     return pin;
   }
@@ -435,10 +559,13 @@ class CloudSync {
       }
     } catch (_) {}
     try {
-      await _db.collection('pins').doc('config').update(
-          {'stores.$storeName': FieldValue.delete()}).timeout(_cloudTimeout);
+      await _db.collection('pins').doc('config').update({
+        'stores.$storeName': FieldValue.delete(),
+        'storePinVersions.$storeName': FieldValue.delete(),
+      }).timeout(_cloudTimeout);
     } catch (_) {}
     pinConfig?.storePins.remove(storeName);
+    pinConfig?.storePinVersions.remove(storeName);
     await fetchStoreIds();
   }
 
@@ -511,8 +638,81 @@ class CloudSync {
         storePins: pinConfig!.storePins,
         ownerPinHash: kind == 'owner' ? hash : pinConfig!.ownerPinHash,
         adminPinHash: kind == 'admin' ? hash : pinConfig!.adminPinHash,
+        storePinVersions: pinConfig!.storePinVersions,
       );
     }
+  }
+
+  /// Đọc mã PIN của 1 cửa hàng (chỉ chủ/admin đọc được doc stores/{id}
+  /// theo Rules). Trả về null nếu cửa hàng tạo từ bản cũ chưa lưu PIN.
+  Future<String?> fetchStorePin(String storeId) async {
+    if (!available || !canPickStore) return null;
+    try {
+      final doc = await _db
+          .collection('stores')
+          .doc(storeId)
+          .get()
+          .timeout(_cloudTimeout);
+      return doc.data()?['pin'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Chủ/admin ĐỔI mã PIN 1 cửa hàng: đổi mật khẩu tài khoản Auth
+  /// (đăng nhập bằng PIN cũ trên app phụ) + cập nhật hash + tăng số
+  /// phiên bản PIN (máy cửa hàng tự đăng xuất, xem
+  /// signOutIfStorePinChanged) + lưu mã PIN mới lên doc stores/{id}
+  /// để chủ/admin xem lại được. PIN cũ lấy từ doc stores; cửa hàng
+  /// tạo từ bản cũ chưa lưu PIN thì không đổi được — phải tạo lại
+  /// cửa hàng. Đổi dở lần trước (mật khẩu Auth đã đổi mà hash chưa)
+  /// thì thử lại bằng chính PIN mới cũng được.
+  Future<void> setStorePin(String storeId, String newPin) async {
+    if (!available || !canPickStore) {
+      throw StateError('Chưa đăng nhập chủ/admin.');
+    }
+    final email = accountEmail('store', storeId);
+    final newPw = accountPassword('store', storeId, newPin);
+    final oldPin = await fetchStorePin(storeId);
+    final provisioned = await _provisionAccount(
+        email: email, password: newPw, storeId: storeId, role: 'store');
+    if (!provisioned.created) {
+      if (oldPin == null || oldPin.isEmpty) {
+        throw StateError(
+            'Cửa hàng này tạo từ bản cũ, chưa lưu mã PIN nên không đổi được. Tạo cửa hàng mới rồi xóa cửa hàng cũ.');
+      }
+      try {
+        await _updateAccountPassword(
+            email: email,
+            oldPassword: accountPassword('store', storeId, oldPin),
+            newPassword: newPw);
+      } on StateError {
+        // Lần đổi trước có thể đã đổi mật khẩu rồi nhưng chưa kịp
+        // ghi hash: thử xác nhận bằng chính mật khẩu mới.
+        await _updateAccountPassword(
+            email: email, oldPassword: newPw, newPassword: newPw);
+      }
+    }
+    final hash = pinHash(newPin);
+    final cfg = pinConfig ?? await fetchPinConfig();
+    final version = cloudPinVersion(storeId, cfg) + 1;
+    try {
+      await _db.collection('pins').doc('config').update({
+        'stores.$storeId': hash,
+        'storePinVersions.$storeId': version,
+      }).timeout(_cloudTimeout);
+    } catch (_) {
+      await _db.collection('pins').doc('config').set({
+        'stores': {storeId: hash},
+        'storePinVersions': {storeId: version},
+      }, SetOptions(merge: true)).timeout(_cloudTimeout);
+    }
+    pinConfig?.storePins[storeId] = hash;
+    pinConfig?.storePinVersions[storeId] = version;
+    await _db
+        .collection('stores')
+        .doc(storeId)
+        .set({'pin': newPin}, SetOptions(merge: true)).timeout(_cloudTimeout);
   }
 
   /// Tải doc users/{uid} để biết tài khoản này là ai (store/owner/admin)

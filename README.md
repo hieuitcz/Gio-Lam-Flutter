@@ -135,23 +135,36 @@ chủ/admin trước):
 
 1. Bấm **Thêm cửa hàng** → nhập tên cửa hàng + mã PIN (4-6 số, nhập
    2 lần). App tự tạo dữ liệu cửa hàng mới trên cloud + tài khoản +
-   mã PIN. Mã PIN hiện **1 lần duy nhất** sau khi tạo — chủ báo mã
-   này cho cửa hàng, sau này không xem lại được.
+   mã PIN. Mã PIN hiện ngay sau khi tạo để chủ báo cho cửa hàng;
+   sau này xem lại được ở dòng cửa hàng đó (nút mắt).
 2. Thêm nhân viên cho cửa hàng đang xem ở **Cài đặt > Nhân viên**
    (nhân viên thêm/sửa/xóa luôn ghi vào đúng cửa hàng đang chọn
    trong ô chọn ở đầu tab Chấm công). Khi thêm nhân viên mới có ô
    chọn **Cửa hàng** — chọn luôn cửa hàng muốn gán, không cần chuyển
-   màn hình sang đó trước. Muốn chuyển 1 nhân viên đã có sang cửa
-   hàng khác (vd sang tháng sau đổi cửa hàng): bấm nút ⇄ ở dòng
-   nhân viên đó, chọn cửa hàng đích — toàn bộ ca làm của người đó
-   chuyển theo. Không chuyển được nếu cửa hàng đích đã có nhân viên
-   trùng tên, hoặc cửa hàng nguồn chỉ còn 1 nhân viên.
+   màn hình sang đó trước. Muốn gán/chuyển 1 nhân viên đã có sang
+   cửa hàng khác: bấm nút ⇄ ở dòng nhân viên đó rồi chọn 1 trong 2:
+   **Gán thêm vào cửa hàng khác** (người đó vẫn ở cửa hàng này —
+   1 nhân viên làm được 2 cửa hàng, giờ làm mỗi cửa hàng tính
+   riêng) hoặc **Chuyển sang cửa hàng khác** (vd sang tháng sau đổi
+   cửa hàng — toàn bộ ca làm của người đó chuyển theo). Không
+   gán/chuyển được nếu cửa hàng đích đã có nhân viên trùng tên;
+   không chuyển hẳn được nếu cửa hàng nguồn chỉ còn 1 nhân viên.
 3. Gửi **bộ cài app** (file `ChamCongHTHSHOP-Setup-windows-N.exe`
    trong Release trên GitHub) cho cửa hàng đó. Cửa hàng cài xong,
    mở app nhập mã PIN là vào đúng cửa hàng của mình.
 4. Xóa cửa hàng: bấm nút xóa ở dòng cửa hàng đó (không xóa được cửa
    hàng đang xem — đổi sang cửa hàng khác trước). Xóa xong thì tài
    khoản của cửa hàng đó mất quyền xem (doc users bị xóa).
+
+**Xem lại / đổi mã PIN cửa hàng:** ở dòng mỗi cửa hàng có nút mắt
+(Xem mã PIN) và nút chìa khóa (Đổi mã PIN). Mã PIN lưu trên doc
+của chính cửa hàng đó (`stores/{tên}.pin`) nên chỉ cửa hàng đó +
+chủ/admin đọc được — cửa hàng khác không xem được, và không nằm
+trong doc `pins/config` đọc công khai. Đổi mã PIN xong thì máy cửa
+hàng đó tự đăng xuất (ngay lúc đang mở app, hoặc lần mở app sau
+nếu đang tắt/mất mạng) và phải nhập mã PIN mới. Cửa hàng tạo từ
+bản cũ chưa lưu mã PIN thì không xem/đổi được — tạo cửa hàng mới
+rồi xóa cửa hàng cũ.
 
 Chưa có ở bản này: **đổi mã PIN cửa hàng** — muốn đổi thì chủ tạo
 lại cửa hàng mới (tên khác hoặc xóa cửa hàng cũ rồi tạo lại) và báo

@@ -204,6 +204,7 @@ class _HomePageState extends State<HomePage>
 
   @override
   void dispose() {
+    cloudSync.stopPinChangeWatch();
     _pulseCtrl.dispose();
     _pinCtrl.dispose();
     _pinCtrl2.dispose();
@@ -727,6 +728,18 @@ class _HomePageState extends State<HomePage>
   // chủ/admin trên máy này; PIN cửa hàng thì ở vai trò nhân viên.
   Future<void> _afterCloudSignIn() async {
     await cloudSync.loadUserProfile(_s.data.storeName);
+    // Chủ/admin vừa đổi mã PIN cửa hàng này: máy tự đăng xuất,
+    // phải nhập mã PIN mới.
+    if (await cloudSync.signOutIfStorePinChanged()) {
+      if (!mounted) return;
+      setState(() {
+        _showCloudLogin = true;
+        _role = 'employee';
+        _tab = 0;
+      });
+      _snack('Mã PIN cửa hàng đã đổi. Nhập mã PIN mới để vào lại.');
+      return;
+    }
     _role = cloudSync.cloudRole == 'admin'
         ? 'admin'
         : cloudSync.cloudRole == 'owner'
@@ -763,6 +776,17 @@ class _HomePageState extends State<HomePage>
       }
     });
     if (changed) _snack('Đã đồng bộ dữ liệu mới nhất từ cloud.');
+    // Theo dõi đổi PIN lúc đang chạy: chủ/admin đổi PIN cửa hàng thì
+    // máy cửa hàng đó tự đăng xuất ngay (chỉ tài khoản cửa hàng).
+    cloudSync.startPinChangeWatch(onStorePinChanged: () {
+      if (!mounted) return;
+      setState(() {
+        _showCloudLogin = true;
+        _role = 'employee';
+        _tab = 0;
+      });
+      _snack('Mã PIN cửa hàng đã đổi. Nhập mã PIN mới để vào lại.');
+    });
   }
 
   // Đăng nhập cloud bằng mã PIN (thay cho email/mật khẩu): PIN khớp
@@ -840,6 +864,7 @@ class _HomePageState extends State<HomePage>
   // Đăng xuất cloud (Cài đặt, chỉ chủ/admin): về màn hình đăng nhập.
   // Dữ liệu local trên máy vẫn giữ nguyên, chỉ là không đồng bộ nữa.
   Future<void> _cloudSignOut() async {
+    cloudSync.stopPinChangeWatch();
     await cloudSync.signOut();
     setState(() {
       _showCloudLogin = true;
@@ -955,15 +980,15 @@ class _HomePageState extends State<HomePage>
       await cloudSync.createStore(name, pin);
       if (!mounted) return;
       setState(() => _cloudBusy = false);
-      // Hiện mã PIN 1 lần để chủ báo cho cửa hàng (sau này không
-      // hiện lại được vì chỉ lưu hash).
+      // Hiện mã PIN để chủ báo cho cửa hàng (sau này xem lại được ở
+      // Cài đặt > Cửa hàng, nút mắt).
       await showCupertinoDialog(
         context: context,
         builder: (ctx) => CupertinoAlertDialog(
           title: Text('Đã thêm cửa hàng $name'),
           content:
               Text('Mã PIN của cửa hàng là: $pin\nBáo mã này cho cửa hàng. '
-                  'Mã PIN chỉ hiện 1 lần này, sau này không xem lại được.'),
+                  'Sau này xem lại được ở Cài đặt > Cửa hàng.'),
           actions: [
             CupertinoDialogAction(
                 isDefaultAction: true,
@@ -972,6 +997,94 @@ class _HomePageState extends State<HomePage>
           ],
         ),
       );
+    } on StateError catch (e) {
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      _snack(e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      _snack('Mất mạng, thử lại sau.');
+    }
+  }
+
+  // Xem lại mã PIN 1 cửa hàng (chỉ chủ/admin).
+  Future<void> _showStorePin(String storeId) async {
+    setState(() => _cloudBusy = true);
+    final pin = await cloudSync.fetchStorePin(storeId);
+    if (!mounted) return;
+    setState(() => _cloudBusy = false);
+    if (pin == null) {
+      _snack(
+          'Cửa hàng này tạo từ bản cũ, chưa lưu mã PIN. Tạo cửa hàng mới rồi xóa cửa hàng cũ.');
+      return;
+    }
+    await showCupertinoDialog(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: Text('Mã PIN cửa hàng $storeId'),
+        content: Text('Mã PIN là: $pin\nChỉ chủ/admin xem được mã này.'),
+        actions: [
+          CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Đã ghi nhớ')),
+        ],
+      ),
+    );
+  }
+
+  // Đổi mã PIN 1 cửa hàng (chỉ chủ/admin): nhập mã mới 2 lần. Đổi
+  // xong máy cửa hàng đó tự đăng xuất, phải nhập mã PIN mới.
+  Future<void> _changeStorePin(String storeId) async {
+    final pinCtrl = TextEditingController();
+    final pin2Ctrl = TextEditingController();
+    final ok = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: Text('Đổi mã PIN $storeId'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 12),
+          CupertinoTextField(
+              style: const TextStyle(color: _ink),
+              controller: pinCtrl,
+              placeholder: 'Mã PIN mới (4-6 chữ số)',
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 6),
+          const SizedBox(height: 8),
+          CupertinoTextField(
+              style: const TextStyle(color: _ink),
+              controller: pin2Ctrl,
+              placeholder: 'Nhập lại mã PIN mới',
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 6),
+        ]),
+        actions: [
+          CupertinoDialogAction(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Hủy')),
+          CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Đổi')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final pin = pinCtrl.text.trim();
+    if (!isValidPin(pin) || pin != pin2Ctrl.text.trim()) {
+      _snack('Mã PIN gồm 4-6 chữ số và 2 lần nhập phải khớp.');
+      return;
+    }
+    setState(() => _cloudBusy = true);
+    try {
+      await cloudSync.setStorePin(storeId, pin);
+      if (!mounted) return;
+      setState(() => _cloudBusy = false);
+      _snack(
+          'Đã đổi mã PIN cửa hàng $storeId. Máy cửa hàng sẽ bị đăng xuất, phải nhập mã PIN mới.');
     } on StateError catch (e) {
       if (!mounted) return;
       setState(() => _cloudBusy = false);
@@ -1996,13 +2109,49 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  /// Chuyển nhân viên (kèm toàn bộ ca làm) sang cửa hàng khác.
-  Future<void> _moveEmployee(Employee emp) async {
+  /// Nút ⇄ ở dòng nhân viên: chọn gán thêm vào cửa hàng khác (vẫn ở
+  /// cửa hàng này — 1 nhân viên làm được 2 cửa hàng, giờ làm mỗi
+  /// cửa hàng tính riêng) hay chuyển hẳn sang cửa hàng khác (xóa
+  /// khỏi cửa hàng này, ca làm chuyển theo).
+  Future<void> _employeeStoreAction(Employee emp) async {
     if (!cloudSync.canPickStore) {
       _snack('Chưa đăng nhập chủ/admin.');
       return;
     }
-    if (_s.data.employees.length <= 1) {
+    final choice = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: Text('${emp.name} — cửa hàng'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(ctx, 'assign'),
+            child: const Text('Gán thêm vào cửa hàng khác'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(ctx, 'move'),
+            child: const Text('Chuyển sang cửa hàng khác'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Hủy'),
+        ),
+      ),
+    );
+    if (choice == null) return;
+    await _assignEmployeeToStore(emp, move: choice == 'move');
+  }
+
+  /// Gán nhân viên sang cửa hàng khác: move=false thì chỉ thêm vào
+  /// cửa hàng đích (vẫn ở cửa hàng này); move=true thì chuyển hẳn
+  /// (xóa khỏi cửa hàng này, toàn bộ ca làm chuyển theo).
+  Future<void> _assignEmployeeToStore(Employee emp,
+      {required bool move}) async {
+    if (!cloudSync.canPickStore) {
+      _snack('Chưa đăng nhập chủ/admin.');
+      return;
+    }
+    if (move && _s.data.employees.length <= 1) {
       _snack('Cửa hàng phải còn ít nhất 1 nhân viên.');
       return;
     }
@@ -2010,14 +2159,20 @@ class _HomePageState extends State<HomePage>
       ..sort()
       ..remove(_s.data.storeName);
     if (targets.isEmpty) {
-      _snack('Chỉ có 1 cửa hàng, không chuyển được.');
+      _snack('Chỉ có 1 cửa hàng, không gán/chuyển được.');
       return;
     }
-    final target =
-        await _pickStore(targets, 'Chuyển ${emp.name} sang cửa hàng');
+    final target = await _pickStore(
+        targets,
+        move
+            ? 'Chuyển ${emp.name} sang cửa hàng'
+            : 'Gán ${emp.name} vào cửa hàng');
     if (target == null) return;
-    final ok = await _confirm('Chuyển cửa hàng',
-        'Chuyển ${emp.name} cùng toàn bộ ca làm sang cửa hàng $target?');
+    final ok = await _confirm(
+        move ? 'Chuyển cửa hàng' : 'Gán thêm cửa hàng',
+        move
+            ? 'Chuyển ${emp.name} cùng toàn bộ ca làm sang cửa hàng $target?'
+            : 'Gán ${emp.name} thêm vào cửa hàng $target? Người này vẫn ở cửa hàng ${_s.data.storeName}, giờ làm mỗi cửa hàng tính riêng.');
     if (!ok) return;
     setState(() => _cloudBusy = true);
     try {
@@ -2027,8 +2182,21 @@ class _HomePageState extends State<HomePage>
             'Không tải được dữ liệu cửa hàng $target. Kiểm tra mạng rồi thử lại.');
         return;
       }
-      // Chuyển trên bản sao trước: chỉ xóa ở cửa hàng hiện tại sau khi
-      // đã đẩy được lên cửa hàng đích, để lỗi giữa chừng không mất người.
+      if (!move) {
+        // Gán thêm: chỉ thêm nhân viên vào cửa hàng đích, không đụng
+        // tới ca làm ở cửa hàng hiện tại.
+        if (!data.addEmployee(Employee(emp.name, emp.rate,
+            annualLeaveAllowance: emp.annualLeaveAllowance))) {
+          _snack('Cửa hàng $target đã có nhân viên ${emp.name}.');
+          return;
+        }
+        await cloudSync.uploadStoreData(target, data);
+        _snack('Đã gán ${emp.name} thêm vào cửa hàng $target.');
+        return;
+      }
+      // Chuyển hẳn: chuyển trên bản sao trước, chỉ xóa ở cửa hàng
+      // hiện tại sau khi đã đẩy được lên cửa hàng đích, để lỗi giữa
+      // chừng không mất người.
       final copy = AppData.fromJson(_s.data.toJson());
       if (!copy.moveEmployeeTo(data, emp.name)) {
         _snack(
@@ -2048,7 +2216,7 @@ class _HomePageState extends State<HomePage>
     } on StateError catch (e) {
       _snack(e.message);
     } catch (e) {
-      _snack('Chuyển cửa hàng lỗi: $e');
+      _snack(move ? 'Chuyển cửa hàng lỗi: $e' : 'Gán cửa hàng lỗi: $e');
     } finally {
       if (mounted) setState(() => _cloudBusy = false);
     }
@@ -2772,10 +2940,24 @@ class _HomePageState extends State<HomePage>
                     subtitle: Text(id == data.storeName
                         ? 'Đang xem cửa hàng này'
                         : 'Bấm để xem cửa hàng này'),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete, size: 18, color: _danger),
-                      onPressed: _cloudBusy ? null : () => _deleteStore(id),
-                    ),
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      IconButton(
+                        icon: const Icon(Icons.visibility, size: 18),
+                        tooltip: 'Xem mã PIN',
+                        onPressed: _cloudBusy ? null : () => _showStorePin(id),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.key, size: 18),
+                        tooltip: 'Đổi mã PIN',
+                        onPressed:
+                            _cloudBusy ? null : () => _changeStorePin(id),
+                      ),
+                      IconButton(
+                        icon:
+                            const Icon(Icons.delete, size: 18, color: _danger),
+                        onPressed: _cloudBusy ? null : () => _deleteStore(id),
+                      ),
+                    ]),
                     onTap: _cloudBusy ? null : () => _switchStore(id),
                   ),
                   const Divider(height: 1, color: _line),
@@ -3218,8 +3400,8 @@ class _HomePageState extends State<HomePage>
             {...cloudSync.storeIds, _s.data.storeName}.length > 1)
           IconButton(
             icon: const Icon(Icons.swap_horiz, size: 18),
-            tooltip: 'Chuyển cửa hàng',
-            onPressed: () => _moveEmployee(e),
+            tooltip: 'Gán / chuyển cửa hàng',
+            onPressed: () => _employeeStoreAction(e),
           ),
         IconButton(
           icon: const Icon(Icons.edit, size: 18),

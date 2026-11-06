@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gio_lam/cloud_sync.dart';
 import 'package:gio_lam/store.dart';
 
 void main() {
@@ -35,5 +36,30 @@ void main() {
     final to = AppData(storeName: 'Rybna 2', employees: []);
     expect(from.moveEmployeeTo(to, 'KhongCo'), isFalse);
     expect(to.employees, isEmpty);
+  });
+
+  test('gán thêm nhân viên vào cửa hàng khác: vẫn ở cửa hàng cũ', () {
+    final from = AppData.seed();
+    from.shifts['Hieu'] = [Shift('2026-11-06', clockIn: 480, clockOut: 960)];
+    final to = AppData(storeName: 'Rybna 2', employees: []);
+    // Gán thêm chỉ thêm nhân viên vào cửa hàng đích, không đụng ca làm
+    // ở cửa hàng cũ (khác với chuyển hẳn).
+    expect(to.addEmployee(Employee('Hieu', 160)), isTrue);
+    expect(from.employees.map((e) => e.name), ['Hieu', 'Hoan']);
+    expect(from.shifts['Hieu']!.length, 1);
+    expect(to.employees.map((e) => e.name), ['Hieu']);
+    expect(to.shifts.containsKey('Hieu'), isFalse);
+  });
+
+  test('PinConfig đọc được số phiên bản PIN từng cửa hàng', () {
+    final cfg = PinConfig.fromDoc({
+      'stores': {'Rybna': 'abc123'},
+      'storePinVersions': {'Rybna': 2, 'Opletolova 22': 1},
+      'adminPinHash': 'hash',
+    });
+    expect(cfg.storePins['Rybna'], 'abc123');
+    expect(cfg.storePinVersions['Rybna'], 2);
+    expect(cfg.storePinVersions['Opletolova 22'], 1);
+    expect(cfg.storePinVersions['ChuaCo'], isNull);
   });
 }

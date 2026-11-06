@@ -1133,7 +1133,11 @@ class _HomePageState extends State<HomePage>
                         ),
                         const SizedBox(height: 20),
                         Row(children: [
-                          if (shift != null)
+                          // Nhân viên chỉ được xóa ca bắt đầu hôm nay;
+                          // ca ngày đã qua (kể cả ca qua đêm vừa kết
+                          // thúc sáng nay) chỉ chủ mới xóa được.
+                          if (shift != null &&
+                              (_isOwner || shift.date == _todayStr))
                             TextButton(
                               onPressed: () async {
                                 final ok = await _confirm('Xóa ngày',

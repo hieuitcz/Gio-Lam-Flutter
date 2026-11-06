@@ -104,8 +104,7 @@ class _GioLamAppState extends State<GioLamApp> {
   }
 
   /// 'Lexend' -> dùng font Lexend; 'System' -> null = font mặc định của hệ thống.
-  String? get _effectiveFontFamily =>
-      _fontFamily == 'Lexend' ? 'Lexend' : null;
+  String? get _effectiveFontFamily => _fontFamily == 'Lexend' ? 'Lexend' : null;
 
   @override
   Widget build(BuildContext context) {
@@ -120,9 +119,10 @@ class _GioLamAppState extends State<GioLamApp> {
       ),
       home: CupertinoTheme(
         data: CupertinoThemeData(
+          brightness: Brightness.light,
           primaryColor: iosIndigo,
           textTheme: CupertinoTextThemeData(
-            textStyle: TextStyle(fontFamily: _effectiveFontFamily),
+            textStyle: TextStyle(fontFamily: _effectiveFontFamily, color: _ink),
           ),
         ),
         child: HomePage(
@@ -191,13 +191,13 @@ class _HomePageState extends State<HomePage>
         _showTamperDialog(
             'Phát hiện file dữ liệu đã bị sửa bên ngoài.',
             'App đã tự khôi phục từ bản sao lưu gần nhất còn nguyên vẹn. '
-            'File bị sửa được giữ lại bên cạnh file dữ liệu để anh kiểm tra.');
+                'File bị sửa được giữ lại bên cạnh file dữ liệu để anh kiểm tra.');
       } else if (status == 'lost') {
         _showTamperDialog(
             'Phát hiện file dữ liệu đã bị sửa bên ngoài.',
             'Không còn bản sao lưu tốt nên dữ liệu đã về trắng. Anh khôi phục '
-            'từ file sao lưu đã xuất trong Cài đặt > Sao lưu dữ liệu > '
-            'Khôi phục từ file.');
+                'từ file sao lưu đã xuất trong Cài đặt > Sao lưu dữ liệu > '
+                'Khôi phục từ file.');
       }
     });
   }
@@ -248,9 +248,8 @@ class _HomePageState extends State<HomePage>
 
   // Nhãn chip chọn nhân viên: nhân viên + đang ẩn tiền thì chỉ hiện tên,
   // không hiện đơn giá giờ (có đơn giá là tính ra được tiền).
-  String _employeeChipLabel(Employee e) => _payHidden
-      ? e.name
-      : '${e.name} · ${e.rate} ${_s.data.currency}/giờ';
+  String _employeeChipLabel(Employee e) =>
+      _payHidden ? e.name : '${e.name} · ${e.rate} ${_s.data.currency}/giờ';
 
   // Nút ⓘ hỗ trợ: icon indigo đặc trong vòng tròn tint + vòng lan tỏa
   // nhấp nháy liên tục cho dễ nhận biết.
@@ -283,8 +282,7 @@ class _HomePageState extends State<HomePage>
                   shape: BoxShape.circle,
                   color: iosIndigo.withValues(alpha: 0.12),
                 ),
-                child: const Icon(Icons.info,
-                    color: iosIndigo, size: 22),
+                child: const Icon(Icons.info, color: iosIndigo, size: 22),
               ),
             ]),
           ),
@@ -330,15 +328,12 @@ class _HomePageState extends State<HomePage>
           IconTile(icon: icon, tint: tint),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label,
-                      style: const TextStyle(fontSize: 15, color: _ink)),
-                  const SizedBox(height: 2),
-                  Text(value,
-                      style: const TextStyle(color: _muted, fontSize: 13)),
-                ]),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: const TextStyle(fontSize: 15, color: _ink)),
+              const SizedBox(height: 2),
+              Text(value, style: const TextStyle(color: _muted, fontSize: 13)),
+            ]),
           ),
           const Icon(Icons.chevron_right, size: 14, color: _muted),
         ]),
@@ -372,8 +367,8 @@ class _HomePageState extends State<HomePage>
   Widget _versionRow() {
     return const Row(children: [
       Expanded(
-          child: Text('Phiên bản',
-              style: TextStyle(fontSize: 15, color: _ink))),
+          child:
+              Text('Phiên bản', style: TextStyle(fontSize: 15, color: _ink))),
       Text('Chấm công $_appVersion',
           style: TextStyle(fontSize: 15, color: _muted)),
     ]);
@@ -386,10 +381,8 @@ class _HomePageState extends State<HomePage>
       context: context,
       builder: (ctx) => Dialog(
         backgroundColor: Colors.white,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        insetPadding:
-            const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
           child: SingleChildScrollView(
@@ -442,8 +435,7 @@ class _HomePageState extends State<HomePage>
                                   color: _ink)),
                           SizedBox(height: 4),
                           Text('Chấm công $_appVersion',
-                              style: TextStyle(
-                                  fontSize: 13, color: _muted)),
+                              style: TextStyle(fontSize: 13, color: _muted)),
                         ],
                       ),
                     ),
@@ -451,8 +443,8 @@ class _HomePageState extends State<HomePage>
                   const SizedBox(height: 18),
                   // Thẻ tác giả + liên hệ nền xám, các hàng ngăn bằng kẻ mờ.
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                     decoration: BoxDecoration(
                       color: _bg,
                       borderRadius: BorderRadius.circular(16),
@@ -513,10 +505,8 @@ class _HomePageState extends State<HomePage>
       context: context,
       builder: (ctx) => Dialog(
         backgroundColor: Colors.white,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        insetPadding:
-            const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
           child: SingleChildScrollView(
@@ -607,9 +597,7 @@ class _HomePageState extends State<HomePage>
           const SizedBox(width: 10),
           Text(title,
               style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: _ink)),
+                  fontSize: 16, fontWeight: FontWeight.w700, color: _ink)),
         ]),
         const SizedBox(height: 10),
         for (final b in bullets) ...[
@@ -620,8 +608,7 @@ class _HomePageState extends State<HomePage>
                 width: 7,
                 height: 7,
                 margin: const EdgeInsets.only(top: 7, left: 6, right: 10),
-                decoration:
-                    BoxDecoration(color: tint, shape: BoxShape.circle),
+                decoration: BoxDecoration(color: tint, shape: BoxShape.circle),
               ),
               Expanded(
                 child: Text(b,
@@ -771,9 +758,8 @@ class _HomePageState extends State<HomePage>
     if (!mounted) return;
     setState(() {
       if (changed) {
-        _employee = _s.data.employees.isNotEmpty
-            ? _s.data.employees.first.name
-            : null;
+        _employee =
+            _s.data.employees.isNotEmpty ? _s.data.employees.first.name : null;
       }
     });
     if (changed) _snack('Đã đồng bộ dữ liệu mới nhất từ cloud.');
@@ -875,9 +861,8 @@ class _HomePageState extends State<HomePage>
     setState(() {
       _cloudBusy = false;
       if (changed) {
-        _employee = _s.data.employees.isNotEmpty
-            ? _s.data.employees.first.name
-            : null;
+        _employee =
+            _s.data.employees.isNotEmpty ? _s.data.employees.first.name : null;
       }
     });
     _snack(changed
@@ -899,9 +884,8 @@ class _HomePageState extends State<HomePage>
       return;
     }
     setState(() {
-      _employee = _s.data.employees.isNotEmpty
-          ? _s.data.employees.first.name
-          : null;
+      _employee =
+          _s.data.employees.isNotEmpty ? _s.data.employees.first.name : null;
     });
     _snack('Đang xem cửa hàng $storeId.');
   }
@@ -924,9 +908,12 @@ class _HomePageState extends State<HomePage>
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 12),
           CupertinoTextField(
-              controller: nameCtrl, placeholder: 'Tên cửa hàng'),
+              style: const TextStyle(color: _ink),
+              controller: nameCtrl,
+              placeholder: 'Tên cửa hàng'),
           const SizedBox(height: 8),
           CupertinoTextField(
+              style: const TextStyle(color: _ink),
               controller: pinCtrl,
               placeholder: 'Mã PIN (4-6 chữ số)',
               keyboardType: TextInputType.number,
@@ -934,6 +921,7 @@ class _HomePageState extends State<HomePage>
               maxLength: 6),
           const SizedBox(height: 8),
           CupertinoTextField(
+              style: const TextStyle(color: _ink),
               controller: pin2Ctrl,
               placeholder: 'Nhập lại mã PIN',
               keyboardType: TextInputType.number,
@@ -973,9 +961,9 @@ class _HomePageState extends State<HomePage>
         context: context,
         builder: (ctx) => CupertinoAlertDialog(
           title: Text('Đã thêm cửa hàng $name'),
-          content: Text(
-              'Mã PIN của cửa hàng là: $pin\nBáo mã này cho cửa hàng. '
-              'Mã PIN chỉ hiện 1 lần này, sau này không xem lại được.'),
+          content:
+              Text('Mã PIN của cửa hàng là: $pin\nBáo mã này cho cửa hàng. '
+                  'Mã PIN chỉ hiện 1 lần này, sau này không xem lại được.'),
           actions: [
             CupertinoDialogAction(
                 isDefaultAction: true,
@@ -1005,7 +993,8 @@ class _HomePageState extends State<HomePage>
       return;
     }
     if (storeName == _s.data.storeName) {
-      _snack('Không xóa được cửa hàng đang xem — đổi sang cửa hàng khác trước.');
+      _snack(
+          'Không xóa được cửa hàng đang xem — đổi sang cửa hàng khác trước.');
       return;
     }
     final ok = await _confirm('Xóa cửa hàng',
@@ -1045,6 +1034,7 @@ class _HomePageState extends State<HomePage>
           const SizedBox(height: 12),
           if (exists)
             CupertinoTextField(
+                style: const TextStyle(color: _ink),
                 controller: curCtrl,
                 placeholder: '$title hiện tại',
                 keyboardType: TextInputType.number,
@@ -1052,6 +1042,7 @@ class _HomePageState extends State<HomePage>
                 maxLength: 6),
           if (exists) const SizedBox(height: 8),
           CupertinoTextField(
+              style: const TextStyle(color: _ink),
               controller: pinCtrl,
               placeholder: '$title mới (4-6 chữ số)',
               keyboardType: TextInputType.number,
@@ -1059,6 +1050,7 @@ class _HomePageState extends State<HomePage>
               maxLength: 6),
           const SizedBox(height: 8),
           CupertinoTextField(
+              style: const TextStyle(color: _ink),
               controller: pin2Ctrl,
               placeholder: 'Nhập lại $title',
               keyboardType: TextInputType.number,
@@ -1089,8 +1081,7 @@ class _HomePageState extends State<HomePage>
     }
     setState(() => _cloudBusy = true);
     try {
-      await cloudSync.setRolePin(kind, pin,
-          currentPin: exists ? cur : null);
+      await cloudSync.setRolePin(kind, pin, currentPin: exists ? cur : null);
       if (!mounted) return;
       setState(() => _cloudBusy = false);
       if (kind == 'admin') {
@@ -1142,9 +1133,7 @@ class _HomePageState extends State<HomePage>
               Text(setup ? 'Đặt mã PIN admin' : 'Nhập mã PIN',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: _ink)),
+                      fontSize: 22, fontWeight: FontWeight.bold, color: _ink)),
               const SizedBox(height: 8),
               Text(
                 setup
@@ -1155,6 +1144,7 @@ class _HomePageState extends State<HomePage>
               ),
               const SizedBox(height: 24),
               CupertinoTextField(
+                style: const TextStyle(color: _ink),
                 controller: _pinCtrl,
                 placeholder: setup ? 'Mã PIN admin mới' : 'Mã PIN',
                 keyboardType: TextInputType.number,
@@ -1170,6 +1160,7 @@ class _HomePageState extends State<HomePage>
               if (setup) ...[
                 const SizedBox(height: 12),
                 CupertinoTextField(
+                  style: const TextStyle(color: _ink),
                   controller: _pinCtrl2,
                   placeholder: 'Nhập lại mã PIN admin',
                   keyboardType: TextInputType.number,
@@ -1179,8 +1170,8 @@ class _HomePageState extends State<HomePage>
                   decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
               ],
               const SizedBox(height: 20),
@@ -1202,8 +1193,8 @@ class _HomePageState extends State<HomePage>
                     ? null
                     : () => setState(() => _showCloudLogin = false),
                 child: const Text('Dùng offline (không đồng bộ)',
-                    style: TextStyle(
-                        color: _muted, fontWeight: FontWeight.w600)),
+                    style:
+                        TextStyle(color: _muted, fontWeight: FontWeight.w600)),
               ),
             ],
           ),
@@ -1219,8 +1210,7 @@ class _HomePageState extends State<HomePage>
     if (!cloudSync.canPickStore || cloudSync.storeIds.isEmpty) {
       return const SizedBox.shrink();
     }
-    final items = {...cloudSync.storeIds, _s.data.storeName}.toList()
-      ..sort();
+    final items = {...cloudSync.storeIds, _s.data.storeName}.toList()..sort();
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Row(children: [
@@ -1228,9 +1218,7 @@ class _HomePageState extends State<HomePage>
         const SizedBox(width: 8),
         const Text('Cửa hàng',
             style: TextStyle(
-                color: _muted,
-                fontSize: 14,
-                fontWeight: FontWeight.w600)),
+                color: _muted, fontSize: 14, fontWeight: FontWeight.w600)),
         const SizedBox(width: 8),
         Expanded(
           child: Container(
@@ -1275,6 +1263,7 @@ class _HomePageState extends State<HomePage>
         content: Padding(
           padding: const EdgeInsets.only(top: 12),
           child: CupertinoTextField(
+            style: const TextStyle(color: _ink),
             controller: ctrl,
             autofocus: true,
             placeholder: 'vd 9:00',
@@ -1283,8 +1272,7 @@ class _HomePageState extends State<HomePage>
         ),
         actions: [
           CupertinoDialogAction(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Hủy')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Hủy')),
           CupertinoDialogAction(
               isDefaultAction: true,
               onPressed: () => Navigator.pop(ctx, ctrl.text),
@@ -1303,6 +1291,7 @@ class _HomePageState extends State<HomePage>
         content: Padding(
           padding: const EdgeInsets.only(top: 12),
           child: CupertinoTextField(
+            style: const TextStyle(color: _ink),
             controller: ctrl,
             obscureText: true,
             autofocus: true,
@@ -1311,8 +1300,7 @@ class _HomePageState extends State<HomePage>
         ),
         actions: [
           CupertinoDialogAction(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Hủy')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Hủy')),
           CupertinoDialogAction(
               isDefaultAction: true,
               onPressed: () => Navigator.pop(ctx, ctrl.text),
@@ -1473,7 +1461,8 @@ class _HomePageState extends State<HomePage>
         ? canEmployeeEditShift(shift.date, shift.clockIn, shift.clockOut)
         : day == _todayStr;
     if (!editable && !_isOwner) {
-      _snack('Ngày đã qua bạn không có quyền sửa hãy liên hệ admin để được trợ giúp');
+      _snack(
+          'Ngày đã qua bạn không có quyền sửa hãy liên hệ admin để được trợ giúp');
       return;
     }
     final inCtrl = TextEditingController(
@@ -1506,12 +1495,13 @@ class _HomePageState extends State<HomePage>
           final total = status == 'work'
               ? durationMinutes(ci, co) == null
                   ? null
-                  : ((durationMinutes(ci, co)! - breakMinutes).clamp(0, 24 * 60))
+                  : ((durationMinutes(ci, co)! - breakMinutes)
+                      .clamp(0, 24 * 60))
               : 0;
           return Dialog(
             backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
             insetPadding:
                 const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
             child: ConstrainedBox(
@@ -1595,8 +1585,7 @@ class _HomePageState extends State<HomePage>
                               label: Text(s.$2),
                               selected: selected,
                               showCheckmark: false,
-                              onSelected: (_) =>
-                                  setState(() => status = s.$1),
+                              onSelected: (_) => setState(() => status = s.$1),
                               selectedColor: _accent,
                               backgroundColor: _bg,
                               side: BorderSide.none,
@@ -1620,6 +1609,7 @@ class _HomePageState extends State<HomePage>
                                           color: _muted)),
                                   const SizedBox(height: 6),
                                   CupertinoTextField(
+                                    style: const TextStyle(color: _ink),
                                     controller: inCtrl,
                                     placeholder: 'vd 9:00',
                                     keyboardType: TextInputType.datetime,
@@ -1645,6 +1635,7 @@ class _HomePageState extends State<HomePage>
                                           color: _muted)),
                                   const SizedBox(height: 6),
                                   CupertinoTextField(
+                                    style: const TextStyle(color: _ink),
                                     controller: outCtrl,
                                     placeholder: 'vd 20:00',
                                     keyboardType: TextInputType.datetime,
@@ -1668,8 +1659,7 @@ class _HomePageState extends State<HomePage>
                               borderRadius: BorderRadius.circular(12)),
                           child: Row(children: [
                             const Text('Nghỉ giữa ca',
-                                style:
-                                    TextStyle(fontSize: 15, color: _ink)),
+                                style: TextStyle(fontSize: 15, color: _ink)),
                             const Spacer(),
                             CupertinoButton(
                               padding: EdgeInsets.zero,
@@ -1677,10 +1667,8 @@ class _HomePageState extends State<HomePage>
                               onPressed: breakMinutes <= 0
                                   ? null
                                   : () => setState(() => breakMinutes -= 5),
-                              child: const Icon(
-                                  Icons.remove_circle,
-                                  color: _accent,
-                                  size: 24),
+                              child: const Icon(Icons.remove_circle,
+                                  color: _accent, size: 24),
                             ),
                             SizedBox(
                               width: 76,
@@ -1696,10 +1684,8 @@ class _HomePageState extends State<HomePage>
                               onPressed: breakMinutes >= 240
                                   ? null
                                   : () => setState(() => breakMinutes += 5),
-                              child: const Icon(
-                                  Icons.add_circle,
-                                  color: _accent,
-                                  size: 24),
+                              child: const Icon(Icons.add_circle,
+                                  color: _accent, size: 24),
                             ),
                           ]),
                         ),
@@ -1711,6 +1697,7 @@ class _HomePageState extends State<HomePage>
                                 color: _muted)),
                         const SizedBox(height: 6),
                         CupertinoTextField(
+                          style: const TextStyle(color: _ink),
                           controller: noteCtrl,
                           placeholder: 'Ghi chú (vd: tăng ca, đi muộn…)',
                           decoration: BoxDecoration(
@@ -1830,22 +1817,27 @@ class _HomePageState extends State<HomePage>
   Future<void> _editEmployee(Employee emp) async {
     final nameCtrl = TextEditingController(text: emp.name);
     final rateCtrl = TextEditingController(text: emp.rate.toString());
-    final leaveCtrl = TextEditingController(
-        text: emp.annualLeaveAllowance.toString());
+    final leaveCtrl =
+        TextEditingController(text: emp.annualLeaveAllowance.toString());
     final ok = await showCupertinoDialog<bool>(
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
         title: const Text('Sửa nhân viên'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 12),
-          CupertinoTextField(controller: nameCtrl, placeholder: 'Tên'),
+          CupertinoTextField(
+              style: const TextStyle(color: _ink),
+              controller: nameCtrl,
+              placeholder: 'Tên'),
           const SizedBox(height: 8),
           CupertinoTextField(
+              style: const TextStyle(color: _ink),
               controller: rateCtrl,
               placeholder: 'Đơn giá/giờ (vd 160)',
               keyboardType: TextInputType.number),
           const SizedBox(height: 8),
           CupertinoTextField(
+              style: const TextStyle(color: _ink),
               controller: leaveCtrl,
               placeholder: 'Ngày phép năm (vd 10)',
               keyboardType: TextInputType.number),
@@ -1863,7 +1855,8 @@ class _HomePageState extends State<HomePage>
     );
     if (ok != true) return;
     final rate = int.tryParse(rateCtrl.text.trim());
-    final leave = int.tryParse(leaveCtrl.text.trim()) ?? emp.annualLeaveAllowance;
+    final leave =
+        int.tryParse(leaveCtrl.text.trim()) ?? emp.annualLeaveAllowance;
     if (nameCtrl.text.trim().isEmpty || rate == null) {
       _snack('Tên hoặc giá giờ không hợp lệ.');
       return;
@@ -1887,9 +1880,13 @@ class _HomePageState extends State<HomePage>
         title: const Text('Thêm nhân viên'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 12),
-          CupertinoTextField(controller: nameCtrl, placeholder: 'Tên'),
+          CupertinoTextField(
+              style: const TextStyle(color: _ink),
+              controller: nameCtrl,
+              placeholder: 'Tên'),
           const SizedBox(height: 8),
           CupertinoTextField(
+              style: const TextStyle(color: _ink),
               controller: rateCtrl,
               placeholder: 'Đơn giá/giờ (vd 160)',
               keyboardType: TextInputType.number),
@@ -1922,8 +1919,8 @@ class _HomePageState extends State<HomePage>
       _snack('Phải còn ít nhất 1 nhân viên.');
       return;
     }
-    final ok = await _confirm('Xóa nhân viên',
-        'Xóa ${emp.name} cùng toàn bộ ca làm của người này?');
+    final ok = await _confirm(
+        'Xóa nhân viên', 'Xóa ${emp.name} cùng toàn bộ ca làm của người này?');
     if (!ok) return;
     setState(() {
       _s.data.employees.remove(emp);
@@ -2013,9 +2010,8 @@ class _HomePageState extends State<HomePage>
       _s.data = restored;
       await _save();
       setState(() {
-        _employee = _s.data.employees.isNotEmpty
-            ? _s.data.employees.first.name
-            : null;
+        _employee =
+            _s.data.employees.isNotEmpty ? _s.data.employees.first.name : null;
         _tab = 0;
       });
       _snack('Đã khôi phục dữ liệu từ file sao lưu.');
@@ -2048,8 +2044,7 @@ class _HomePageState extends State<HomePage>
     // Phím tắt Ctrl+H mở đăng nhập chủ cửa hàng (không có nút hiện ngoài).
     return Shortcuts(
       shortcuts: const {
-        SingleActivator(LogicalKeyboardKey.keyH, control: true):
-            _OwnerIntent(),
+        SingleActivator(LogicalKeyboardKey.keyH, control: true): _OwnerIntent(),
       },
       child: Actions(
         actions: {
@@ -2082,15 +2077,13 @@ class _HomePageState extends State<HomePage>
     final data = _s.data;
     final emp = data.employees.where((e) => e.name == _employee).firstOrNull;
     final open = _employee == null ? null : data.openShift(_employee!);
-    final todaySegments = _employee == null
-        ? <Shift>[]
-        : data.shiftsOn(_employee!, _todayStr);
-    final todayClosed =
-        todaySegments.where((s) => s.clockOut != null).toList();
-    final todayTotal = _employee == null
-        ? 0
-        : data.dayTotalMinutes(_employee!, _todayStr);
-    final weekday = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][_now.weekday % 7];
+    final todaySegments =
+        _employee == null ? <Shift>[] : data.shiftsOn(_employee!, _todayStr);
+    final todayClosed = todaySegments.where((s) => s.clockOut != null).toList();
+    final todayTotal =
+        _employee == null ? 0 : data.dayTotalMinutes(_employee!, _todayStr);
+    final weekday =
+        ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][_now.weekday % 7];
     final monthTotal = emp == null
         ? (days: 0, minutes: 0)
         : data.monthTotal(emp.name, _month.year, _month.month);
@@ -2102,7 +2095,8 @@ class _HomePageState extends State<HomePage>
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 44, 24, 0),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               const IconTile(icon: Icons.work, tint: _teal),
               const SizedBox(width: 10),
@@ -2151,7 +2145,8 @@ class _HomePageState extends State<HomePage>
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -2351,8 +2346,7 @@ class _HomePageState extends State<HomePage>
                   () => _month = DateTime(_month.year, _month.month + 1)),
             ),
             const SizedBox(height: 16),
-            const AppSectionHeader(
-                icon: Icons.bar_chart, title: 'Tổng quan'),
+            const AppSectionHeader(icon: Icons.bar_chart, title: 'Tổng quan'),
             const SizedBox(height: 8),
             GradientSummaryCard(metrics: [
               MetricData(
@@ -2385,8 +2379,9 @@ class _HomePageState extends State<HomePage>
     final total = emp == null
         ? (days: 0, minutes: 0)
         : data.monthTotal(emp.name, _month.year, _month.month);
-    final rows =
-        emp == null ? <Shift>[] : data.monthShifts(emp.name, _month.year, _month.month);
+    final rows = emp == null
+        ? <Shift>[]
+        : data.monthShifts(emp.name, _month.year, _month.month);
     final overtime = emp == null
         ? 0
         : data.monthOvertime(emp.name, _month.year, _month.month);
@@ -2394,7 +2389,8 @@ class _HomePageState extends State<HomePage>
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 48, 20, 24),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const Text('Báo cáo',
               style: TextStyle(
                   fontSize: 34, fontWeight: FontWeight.bold, color: _ink)),
@@ -2437,8 +2433,7 @@ class _HomePageState extends State<HomePage>
                 () => _month = DateTime(_month.year, _month.month + 1)),
           ),
           const SizedBox(height: 20),
-          const AppSectionHeader(
-              icon: Icons.bar_chart, title: 'Tổng hợp'),
+          const AppSectionHeader(icon: Icons.bar_chart, title: 'Tổng hợp'),
           const SizedBox(height: 8),
           GradientSummaryCard(metrics: [
             MetricData(
@@ -2465,8 +2460,7 @@ class _HomePageState extends State<HomePage>
           _card(
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Row(children: [
-                IconTile(
-                    icon: Icons.description, tint: _accent),
+                IconTile(icon: Icons.description, tint: _accent),
                 SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -2507,14 +2501,11 @@ class _HomePageState extends State<HomePage>
           Row(children: [
             const Expanded(
                 child: AppSectionHeader(
-                    icon: Icons.list,
-                    title: 'Dữ liệu trong báo cáo')),
+                    icon: Icons.list, title: 'Dữ liệu trong báo cáo')),
             CupertinoButton(
               padding: EdgeInsets.zero,
               minimumSize: Size.zero,
-              onPressed: emp == null
-                  ? null
-                  : () => _showEntryEditor(),
+              onPressed: emp == null ? null : () => _showEntryEditor(),
               child: const Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(Icons.add_circle, size: 16),
                 SizedBox(width: 4),
@@ -2565,7 +2556,10 @@ class _HomePageState extends State<HomePage>
         title: const Text('Tên cửa hàng'),
         content: Padding(
           padding: const EdgeInsets.only(top: 12),
-          child: CupertinoTextField(controller: ctrl, autofocus: true),
+          child: CupertinoTextField(
+              style: const TextStyle(color: _ink),
+              controller: ctrl,
+              autofocus: true),
         ),
         actions: [
           CupertinoDialogAction(
@@ -2591,7 +2585,8 @@ class _HomePageState extends State<HomePage>
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 48, 20, 24),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const Text('Cài đặt',
               style: TextStyle(
                   fontSize: 34, fontWeight: FontWeight.bold, color: _ink)),
@@ -2604,14 +2599,13 @@ class _HomePageState extends State<HomePage>
           AppCard(
             padding: EdgeInsets.zero,
             child: ListTile(
-              leading: const IconTile(
-                  icon: Icons.work, tint: _teal),
+              leading: const IconTile(icon: Icons.work, tint: _teal),
               title: const Text('Tên cửa hàng'),
               subtitle: Text(data.storeName,
                   style: const TextStyle(
                       color: _ink, fontWeight: FontWeight.w600)),
-              trailing: const Icon(Icons.chevron_right,
-                  size: 16, color: _muted),
+              trailing:
+                  const Icon(Icons.chevron_right, size: 16, color: _muted),
               onTap: _editStoreName,
             ),
           ),
@@ -2631,8 +2625,7 @@ class _HomePageState extends State<HomePage>
               ] else ...[
                 for (final id in cloudSync.storeIds) ...[
                   ListTile(
-                    leading: const IconTile(
-                        icon: Icons.store, tint: _teal),
+                    leading: const IconTile(icon: Icons.store, tint: _teal),
                     title: Text(id,
                         style: const TextStyle(
                             fontWeight: FontWeight.w600, color: _ink)),
@@ -2640,21 +2633,16 @@ class _HomePageState extends State<HomePage>
                         ? 'Đang xem cửa hàng này'
                         : 'Bấm để xem cửa hàng này'),
                     trailing: IconButton(
-                      icon: const Icon(Icons.delete,
-                          size: 18, color: _danger),
-                      onPressed: _cloudBusy
-                          ? null
-                          : () => _deleteStore(id),
+                      icon: const Icon(Icons.delete, size: 18, color: _danger),
+                      onPressed: _cloudBusy ? null : () => _deleteStore(id),
                     ),
-                    onTap: _cloudBusy
-                        ? null
-                        : () => _switchStore(id),
+                    onTap: _cloudBusy ? null : () => _switchStore(id),
                   ),
                   const Divider(height: 1, color: _line),
                 ],
                 ListTile(
-                  leading: const IconTile(
-                      icon: Icons.add_circle, tint: _accent),
+                  leading:
+                      const IconTile(icon: Icons.add_circle, tint: _accent),
                   title: const Text('Thêm cửa hàng',
                       style: TextStyle(color: _accentDark)),
                   subtitle: const Text(
@@ -2713,9 +2701,8 @@ class _HomePageState extends State<HomePage>
                 ],
                 const Divider(height: 1, color: _line),
                 ListTile(
-                  leading: const IconTile(
-                      icon: Icons.add_circle,
-                      tint: _accent),
+                  leading:
+                      const IconTile(icon: Icons.add_circle, tint: _accent),
                   title: const Text('Thêm nhân viên',
                       style: TextStyle(color: _accentDark)),
                   onTap: _addEmployee,
@@ -2724,13 +2711,13 @@ class _HomePageState extends State<HomePage>
             ),
           ),
           const SizedBox(height: 20),
-          const AppSectionHeader(icon: Icons.access_time_filled, title: 'Giờ làm'),
+          const AppSectionHeader(
+              icon: Icons.access_time_filled, title: 'Giờ làm'),
           const SizedBox(height: 8),
           _card(
             Column(children: [
               Row(children: [
-                const IconTile(
-                    icon: Icons.access_time_filled, tint: _accent),
+                const IconTile(icon: Icons.access_time_filled, tint: _accent),
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text('Giờ chuẩn',
@@ -2742,12 +2729,10 @@ class _HomePageState extends State<HomePage>
                   onPressed: data.standardMinutesPerDay <= 60
                       ? null
                       : () async {
-                          setState(() =>
-                              data.standardMinutesPerDay -= 30);
+                          setState(() => data.standardMinutesPerDay -= 30);
                           await _save();
                         },
-                  child: const Icon(Icons.remove_circle,
-                      color: _accent),
+                  child: const Icon(Icons.remove_circle, color: _accent),
                 ),
                 Text(
                     '${standardHours.toStringAsFixed(standardHours % 1 == 0 ? 0 : 1)}h',
@@ -2761,12 +2746,10 @@ class _HomePageState extends State<HomePage>
                   onPressed: data.standardMinutesPerDay >= 1440
                       ? null
                       : () async {
-                          setState(() =>
-                              data.standardMinutesPerDay += 30);
+                          setState(() => data.standardMinutesPerDay += 30);
                           await _save();
                         },
-                  child: const Icon(Icons.add_circle,
-                      color: _accent),
+                  child: const Icon(Icons.add_circle, color: _accent),
                 ),
               ]),
               const SizedBox(height: 8),
@@ -2782,9 +2765,7 @@ class _HomePageState extends State<HomePage>
           _card(
             Column(children: [
               Row(children: [
-                const IconTile(
-                    icon: Icons.paid,
-                    tint: _teal),
+                const IconTile(icon: Icons.paid, tint: _teal),
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text('Loại tiền',
@@ -2820,26 +2801,22 @@ class _HomePageState extends State<HomePage>
             padding: EdgeInsets.zero,
             child: Column(children: [
               ListTile(
-                leading: const IconTile(
-                    icon: Icons.upload,
-                    tint: iosBlue),
+                leading: const IconTile(icon: Icons.upload, tint: iosBlue),
                 title: const Text('Xuất sao lưu (.json)'),
-                subtitle: const Text(
-                    'Lưu toàn bộ dữ liệu + cài đặt ra file JSON'),
-                trailing: const Icon(Icons.chevron_right,
-                    size: 16, color: _muted),
+                subtitle:
+                    const Text('Lưu toàn bộ dữ liệu + cài đặt ra file JSON'),
+                trailing:
+                    const Icon(Icons.chevron_right, size: 16, color: _muted),
                 onTap: _exportBackup,
               ),
               const Divider(height: 1, color: _line),
               ListTile(
-                leading: const IconTile(
-                    icon: Icons.download,
-                    tint: iosBlue),
+                leading: const IconTile(icon: Icons.download, tint: iosBlue),
                 title: const Text('Khôi phục từ file'),
-                subtitle: const Text(
-                    'Thay thế dữ liệu hiện tại bằng file sao lưu'),
-                trailing: const Icon(Icons.chevron_right,
-                    size: 16, color: _muted),
+                subtitle:
+                    const Text('Thay thế dữ liệu hiện tại bằng file sao lưu'),
+                trailing:
+                    const Icon(Icons.chevron_right, size: 16, color: _muted),
                 onTap: _importBackup,
               ),
             ]),
@@ -2864,8 +2841,7 @@ class _HomePageState extends State<HomePage>
               if (cloudSync.lastSyncTime != null) ...[
                 const Divider(height: 1, color: _line),
                 ListTile(
-                  leading:
-                      const IconTile(icon: Icons.sync, tint: _teal),
+                  leading: const IconTile(icon: Icons.sync, tint: _teal),
                   title: const Text('Đồng bộ lần cuối'),
                   subtitle: Text(
                       '${cloudSync.lastSyncTime!.day}/${cloudSync.lastSyncTime!.month}/${cloudSync.lastSyncTime!.year} ${cloudSync.lastSyncTime!.hour.toString().padLeft(2, '0')}:${cloudSync.lastSyncTime!.minute.toString().padLeft(2, '0')}'),
@@ -2879,19 +2855,16 @@ class _HomePageState extends State<HomePage>
                     'Tải về nếu cloud mới hơn, không thì đẩy dữ liệu local lên'),
                 trailing: _cloudBusy
                     ? const CupertinoActivityIndicator()
-                    : const Icon(Icons.chevron_right,
-                        size: 16, color: _muted),
+                    : const Icon(Icons.chevron_right, size: 16, color: _muted),
                 onTap: _cloudBusy ? null : _syncNow,
               ),
               if (cloudSync.signedIn) ...[
                 const Divider(height: 1, color: _line),
                 ListTile(
-                  leading:
-                      const IconTile(icon: Icons.logout, tint: _danger),
+                  leading: const IconTile(icon: Icons.logout, tint: _danger),
                   title: const Text('Đăng xuất (nhập lại mã PIN)',
                       style: TextStyle(color: _danger)),
-                  subtitle: const Text(
-                      'Dữ liệu local trên máy vẫn giữ nguyên'),
+                  subtitle: const Text('Dữ liệu local trên máy vẫn giữ nguyên'),
                   onTap: _cloudSignOut,
                 ),
               ],
@@ -2924,11 +2897,10 @@ class _HomePageState extends State<HomePage>
             padding: EdgeInsets.zero,
             child: Column(children: [
               ListTile(
-                leading: const IconTile(
-                    icon: Icons.menu_book, tint: iosBlue),
+                leading: const IconTile(icon: Icons.menu_book, tint: iosBlue),
                 title: const Text('Hướng dẫn sử dụng'),
-                trailing: const Icon(Icons.chevron_right,
-                    size: 16, color: _muted),
+                trailing:
+                    const Icon(Icons.chevron_right, size: 16, color: _muted),
                 onTap: _showGuideDialog,
               ),
             ]),
@@ -2940,17 +2912,15 @@ class _HomePageState extends State<HomePage>
             padding: EdgeInsets.zero,
             child: Column(children: [
               ListTile(
-                leading: const IconTile(
-                    icon: Icons.lock, tint: _accent),
+                leading: const IconTile(icon: Icons.lock, tint: _accent),
                 title: const Text('Đổi mật khẩu chủ'),
-                trailing: const Icon(Icons.chevron_right,
-                    size: 16, color: _muted),
+                trailing:
+                    const Icon(Icons.chevron_right, size: 16, color: _muted),
                 onTap: _changeOwnerPassword,
               ),
               const Divider(height: 1, color: _line),
               ListTile(
-                leading: const IconTile(
-                    icon: Icons.lock_open, tint: _danger),
+                leading: const IconTile(icon: Icons.lock_open, tint: _danger),
                 title: Text(
                     _isAdmin
                         ? 'Thoát chế độ admin'
@@ -2976,8 +2946,8 @@ class _HomePageState extends State<HomePage>
                 title: const Text('Đặt mật khẩu tổng'),
                 subtitle: const Text(
                     'Mật khẩu quyền cao nhất, luôn vào được dù mật khẩu chủ đã đổi'),
-                trailing: const Icon(Icons.chevron_right,
-                    size: 16, color: _muted),
+                trailing:
+                    const Icon(Icons.chevron_right, size: 16, color: _muted),
                 onTap: _setMasterPassword,
               ),
             ),
@@ -2994,47 +2964,43 @@ class _HomePageState extends State<HomePage>
                   leading: const IconTile(
                       icon: Icons.admin_panel_settings, tint: _accent),
                   title: const Text('Đổi mật khẩu tổng'),
-                  trailing: const Icon(Icons.chevron_right,
-                      size: 16, color: _muted),
+                  trailing:
+                      const Icon(Icons.chevron_right, size: 16, color: _muted),
                   onTap: _changeMasterPassword,
                 ),
                 const Divider(height: 1, color: _line),
                 ListTile(
-                  leading: const IconTile(
-                      icon: Icons.lock_reset, tint: _accent),
+                  leading:
+                      const IconTile(icon: Icons.lock_reset, tint: _accent),
                   title: const Text('Đặt lại mật khẩu chủ'),
-                  subtitle: const Text(
-                      'Không cần biết mật khẩu chủ cũ'),
-                  trailing: const Icon(Icons.chevron_right,
-                      size: 16, color: _muted),
+                  subtitle: const Text('Không cần biết mật khẩu chủ cũ'),
+                  trailing:
+                      const Icon(Icons.chevron_right, size: 16, color: _muted),
                   onTap: _resetOwnerPassword,
                 ),
                 const Divider(height: 1, color: _line),
                 ListTile(
-                  leading: const IconTile(
-                      icon: Icons.pin, tint: _accent),
+                  leading: const IconTile(icon: Icons.pin, tint: _accent),
                   title: const Text('Đặt/đổi mã PIN chủ'),
-                  subtitle: const Text(
-                      'Mã PIN đăng nhập cloud của chủ cửa hàng'),
-                  trailing: const Icon(Icons.chevron_right,
-                      size: 16, color: _muted),
+                  subtitle:
+                      const Text('Mã PIN đăng nhập cloud của chủ cửa hàng'),
+                  trailing:
+                      const Icon(Icons.chevron_right, size: 16, color: _muted),
                   onTap: _cloudBusy ? null : () => _setRolePin('owner'),
                 ),
                 const Divider(height: 1, color: _line),
                 ListTile(
-                  leading: const IconTile(
-                      icon: Icons.pin, tint: _accent),
+                  leading: const IconTile(icon: Icons.pin, tint: _accent),
                   title: const Text('Đổi mã PIN admin'),
-                  subtitle: const Text(
-                      'Đổi xong phải đăng nhập lại bằng mã PIN mới'),
-                  trailing: const Icon(Icons.chevron_right,
-                      size: 16, color: _muted),
+                  subtitle:
+                      const Text('Đổi xong phải đăng nhập lại bằng mã PIN mới'),
+                  trailing:
+                      const Icon(Icons.chevron_right, size: 16, color: _muted),
                   onTap: _cloudBusy ? null : () => _setRolePin('admin'),
                 ),
                 const Divider(height: 1, color: _line),
                 const ListTile(
-                  leading: IconTile(
-                      icon: Icons.info, tint: _muted),
+                  leading: IconTile(icon: Icons.info, tint: _muted),
                   title: Text(
                       'Mã PIN cloud khác mật khẩu tổng local (Ctrl+H): PIN để vào app + đồng bộ, mật khẩu tổng để mở chế độ admin trên máy này kể cả khi mất mạng.'),
                   subtitle: Text(
@@ -3042,8 +3008,8 @@ class _HomePageState extends State<HomePage>
                 ),
                 const Divider(height: 1, color: _line),
                 ListTile(
-                  leading: const IconTile(
-                      icon: Icons.visibility_off, tint: _accent),
+                  leading:
+                      const IconTile(icon: Icons.visibility_off, tint: _accent),
                   title: const Text('Ẩn tiền công với nhân viên'),
                   subtitle: const Text(
                       'Nhân viên chỉ thấy giờ làm, không thấy tiền công và đơn giá giờ'),
@@ -3071,28 +3037,22 @@ class _HomePageState extends State<HomePage>
     final pay = minutes / 60 * emp.rate;
     return AppCard(
       child: Row(children: [
-        const IconTile(
-            icon: Icons.paid, tint: _teal),
+        const IconTile(icon: Icons.paid, tint: _teal),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Tiền công tháng',
-                    style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        color: _ink)),
-                const SizedBox(height: 3),
-                Text('Theo ${emp.rate} ${data.currency}/giờ',
-                    style: const TextStyle(color: _muted, fontSize: 13)),
-              ]),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Tiền công tháng',
+                style: TextStyle(
+                    fontSize: 17, fontWeight: FontWeight.w600, color: _ink)),
+            const SizedBox(height: 3),
+            Text('Theo ${emp.rate} ${data.currency}/giờ',
+                style: const TextStyle(color: _muted, fontSize: 13)),
+          ]),
         ),
         Text('${pay.toStringAsFixed(0)} ${data.currency}',
             style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                color: _accentDark)),
+                fontSize: 17, fontWeight: FontWeight.bold, color: _accentDark)),
       ]),
     );
   }
@@ -3104,8 +3064,8 @@ class _HomePageState extends State<HomePage>
       leading: CircleAvatar(
         backgroundColor: _accent.withValues(alpha: 0.12),
         child: Text(e.name.isEmpty ? '?' : e.name[0].toUpperCase(),
-            style: const TextStyle(
-                color: _accent, fontWeight: FontWeight.bold)),
+            style:
+                const TextStyle(color: _accent, fontWeight: FontWeight.bold)),
       ),
       title: Text(e.name,
           style: const TextStyle(fontWeight: FontWeight.w600, color: _ink)),
@@ -3119,8 +3079,7 @@ class _HomePageState extends State<HomePage>
           onPressed: () => _editEmployee(e),
         ),
         IconButton(
-          icon: const Icon(Icons.delete,
-              size: 18, color: _danger),
+          icon: const Icon(Icons.delete, size: 18, color: _danger),
           onPressed: () => _removeEmployee(e),
         ),
       ]),
@@ -3222,8 +3181,7 @@ class _HomePageState extends State<HomePage>
               const Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(Icons.edit, size: 10, color: _amber),
                 SizedBox(width: 3),
-                Text('Đã sửa',
-                    style: TextStyle(fontSize: 11, color: _amber)),
+                Text('Đã sửa', style: TextStyle(fontSize: 11, color: _amber)),
               ]),
             ],
           ]),

@@ -28,4 +28,24 @@ void main() {
     expect(bytes.length, greaterThan(1000));
     expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
   });
+
+  test('PDF nhan vien: an gio cong, tang ca, tien cong', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final data = AppData.seed();
+    final now = DateTime.now();
+    final day =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    data.shifts['Hieu'] = [
+      Shift(day, clockIn: 9 * 60, clockOut: 18 * 60), // 9h00, vuot 8h
+    ];
+    final bytes = await buildMonthPdf(
+      data: data,
+      employee: data.employees.first,
+      year: now.year,
+      month: now.month,
+      hideSensitive: true,
+    );
+    expect(bytes.length, greaterThan(1000));
+    expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+  });
 }

@@ -30,8 +30,11 @@ String _weekday(DateTime d) =>
 
 /// 1 dòng trong bảng PDF cho 1 đoạn ca (shifts[i]).
 /// Tăng ca của ngày chỉ hiện ở dòng cuối cùng của ngày đó.
+/// Khi [hideSensitive] bật (nhân viên xem): bỏ 2 cột "Giờ công" và
+/// "Tăng ca" — chỉ giữ Ngày/Thứ/Vào/Ra/Ghi chú.
 List<String> _pdfRow(
-    List<Shift> shifts, int i, AppData data, String employeeName) {
+    List<Shift> shifts, int i, AppData data, String employeeName,
+    {bool hideSensitive = false}) {
   final s = shifts[i];
   final d = DateTime.parse(s.date);
   final isLastOfDay =
@@ -51,7 +54,7 @@ List<String> _pdfRow(
   final isWork = s.status == 'work';
   final dayOt =
       isLastOfDay ? data.dayOvertime(employeeName, s.date) : 0;
-  return [
+  final row = [
     _dateStr(d),
     _weekday(d),
     s.clockIn == null ? '—' : fmtHhmm(s.clockIn!),
@@ -60,13 +63,19 @@ List<String> _pdfRow(
     !isWork || dayOt == 0 ? '—' : fmtDuration(dayOt),
     notes.join(', '),
   ];
+  if (hideSensitive) return [row[0], row[1], row[2], row[3], row[6]];
+  return row;
 }
 
+/// Xuất PDF tháng đầy đủ (chủ/admin) hoặc ẩn nội dung nhạy cảm
+/// (nhân viên + ẩn tiền công đang bật): bỏ cột "Giờ công"/"Tăng ca",
+/// bỏ "Đơn giá", phần tổng kết chỉ giữ số ngày làm và nghỉ phép.
 Future<Uint8List> buildMonthPdf({
   required AppData data,
   required Employee employee,
   required int year,
   required int month,
+  bool hideSensitive = false,
 }) async {
   final regular = pw.Font.ttf(
       await rootBundle.load('assets/fonts/Roboto-Regular.ttf'));
@@ -103,24 +112,35 @@ Future<Uint8List> buildMonthPdf({
         pw.SizedBox(height: 4),
         pw.Text('Cửa hàng: ${data.storeName}',
             style: const pw.TextStyle(fontSize: 11)),
-        pw.SizedBox(height: 4),
-        pw.Text(
-            'Đơn giá: ${employee.rate} ${data.currency}/giờ',
-            style: const pw.TextStyle(fontSize: 11)),
+        if (!hideSensitive) ...[
+          pw.SizedBox(height: 4),
+          pw.Text(
+              'Đơn giá: ${employee.rate} ${data.currency}/giờ',
+              style: const pw.TextStyle(fontSize: 11)),
+        ],
         pw.SizedBox(height: 16),
         pw.TableHelper.fromTextArray(
-          headers: const [
-            'Ngày',
-            'Thứ',
-            'Vào',
-            'Ra',
-            'Giờ công',
-            'Tăng ca',
-            'Ghi chú',
-          ],
+          headers: hideSensitive
+              ? const [
+                  'Ngày',
+                  'Thứ',
+                  'Vào',
+                  'Ra',
+                  'Ghi chú',
+                ]
+              : const [
+                  'Ngày',
+                  'Thứ',
+                  'Vào',
+                  'Ra',
+                  'Giờ công',
+                  'Tăng ca',
+                  'Ghi chú',
+                ],
           data: [
             for (var i = 0; i < shifts.length; i++)
-              _pdfRow(shifts, i, data, employee.name),
+              _pdfRow(shifts, i, data, employee.name,
+                  hideSensitive: hideSensitive),
           ],
           headerStyle: pw.TextStyle(font: bold, fontSize: 9),
           cellStyle: const pw.TextStyle(fontSize: 9),
@@ -128,15 +148,23 @@ Future<Uint8List> buildMonthPdf({
               const pw.BoxDecoration(color: PdfColors.grey200),
           cellAlignment: pw.Alignment.center,
           headerAlignment: pw.Alignment.center,
-          columnWidths: {
-            0: const pw.FixedColumnWidth(70),
-            1: const pw.FixedColumnWidth(34),
-            2: const pw.FixedColumnWidth(44),
-            3: const pw.FixedColumnWidth(44),
-            4: const pw.FixedColumnWidth(60),
-            5: const pw.FixedColumnWidth(56),
-            6: const pw.FlexColumnWidth(),
-          },
+          columnWidths: hideSensitive
+              ? {
+                  0: const pw.FixedColumnWidth(70),
+                  1: const pw.FixedColumnWidth(34),
+                  2: const pw.FixedColumnWidth(44),
+                  3: const pw.FixedColumnWidth(44),
+                  4: const pw.FlexColumnWidth(),
+                }
+              : {
+                  0: const pw.FixedColumnWidth(70),
+                  1: const pw.FixedColumnWidth(34),
+                  2: const pw.FixedColumnWidth(44),
+                  3: const pw.FixedColumnWidth(44),
+                  4: const pw.FixedColumnWidth(60),
+                  5: const pw.FixedColumnWidth(56),
+                  6: const pw.FlexColumnWidth(),
+                },
         ),
         pw.SizedBox(height: 18),
         pw.Text('Tổng kết tháng $month/$year',
@@ -144,21 +172,25 @@ Future<Uint8List> buildMonthPdf({
         pw.SizedBox(height: 6),
         pw.Text('Số ngày làm: ${total.days} ngày',
             style: const pw.TextStyle(fontSize: 11)),
-        pw.SizedBox(height: 4),
-        pw.Text('Tổng giờ: ${fmtDuration(total.minutes)}',
-            style: const pw.TextStyle(fontSize: 11)),
-        pw.SizedBox(height: 4),
-        pw.Text(
-            'Tăng ca (trên ${(standard / 60).toStringAsFixed(standard % 60 == 0 ? 0 : 1)}h/ngày): ${fmtDuration(overtimeTotal)}',
-            style: const pw.TextStyle(fontSize: 11)),
+        if (!hideSensitive) ...[
+          pw.SizedBox(height: 4),
+          pw.Text('Tổng giờ: ${fmtDuration(total.minutes)}',
+              style: const pw.TextStyle(fontSize: 11)),
+          pw.SizedBox(height: 4),
+          pw.Text(
+              'Tăng ca (trên ${(standard / 60).toStringAsFixed(standard % 60 == 0 ? 0 : 1)}h/ngày): ${fmtDuration(overtimeTotal)}',
+              style: const pw.TextStyle(fontSize: 11)),
+        ],
         pw.SizedBox(height: 4),
         pw.Text(
             'Nghỉ phép: ${data.monthLeaveDays(employee.name, year, month)} ngày',
             style: const pw.TextStyle(fontSize: 11)),
-        pw.SizedBox(height: 4),
-        pw.Text(
-            'Tiền công: ${pay.toStringAsFixed(0)} ${data.currency} (giá ${employee.rate} ${data.currency}/giờ)',
-            style: pw.TextStyle(font: bold, fontSize: 11)),
+        if (!hideSensitive) ...[
+          pw.SizedBox(height: 4),
+          pw.Text(
+              'Tiền công: ${pay.toStringAsFixed(0)} ${data.currency} (giá ${employee.rate} ${data.currency}/giờ)',
+              style: pw.TextStyle(font: bold, fontSize: 11)),
+        ],
       ],
     ),
   );

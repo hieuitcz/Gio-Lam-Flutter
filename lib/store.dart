@@ -100,7 +100,9 @@ class AppData {
   String currency;
   // Font chữ giao diện: 'Lexend' (mặc định) hoặc 'System' (font hệ thống).
   String fontFamily;
-  AppData({required this.storeName, required this.employees, Map<String, List<Shift>>? shifts, this.ownerHash, this.standardMinutesPerDay = 480, this.currency = 'Kč', this.fontFamily = 'Lexend'})
+  // Ẩn tiền công với nhân viên (chỉ chủ/admin mới thấy tiền). Mặc định bật.
+  bool hidePay;
+  AppData({required this.storeName, required this.employees, Map<String, List<Shift>>? shifts, this.ownerHash, this.standardMinutesPerDay = 480, this.currency = 'Kč', this.fontFamily = 'Lexend', this.hidePay = true})
       : shifts = shifts ?? {};
 
   factory AppData.seed() => AppData(
@@ -116,6 +118,7 @@ class AppData {
         'standardMinutesPerDay': standardMinutesPerDay,
         'currency': currency,
         'fontFamily': fontFamily,
+        'hidePay': hidePay,
       };
 
   factory AppData.fromJson(Map<String, dynamic> j) => AppData(
@@ -130,6 +133,7 @@ class AppData {
         standardMinutesPerDay: (j['standardMinutesPerDay'] as num?)?.toInt() ?? 480,
         currency: j['currency'] as String? ?? 'Kč',
         fontFamily: j['fontFamily'] as String? ?? 'Lexend',
+        hidePay: j['hidePay'] as bool? ?? true,
       );
 
   /// Tất cả đoạn ca của 1 ngày (đã sắp theo giờ vào).
@@ -241,6 +245,20 @@ class DataStore {
 
   File get _keyFile => File('${file.path}.key');
   File get _bakFile => File('${file.path}.bak');
+  // Mật khẩu tổng (admin) lưu RIÊNG 1 file, không nằm trong JSON dữ
+  // liệu đã ký — để khôi phục dữ liệu cũng không mất mật khẩu tổng.
+  File get _masterFile => File('${file.path}.master');
+  String? _masterHash; // cache SHA-256 của mật khẩu tổng
+
+  /// Đọc mật khẩu tổng (nếu có) lúc khởi động.
+  Future<void> _loadMasterHash() async {
+    try {
+      if (await _masterFile.exists()) {
+        final h = (await _masterFile.readAsString()).trim();
+        if (h.length == 64) _masterHash = h;
+      }
+    } catch (_) {}
+  }
 
   /// Khóa ký ngẫu nhiên 32 byte, lưu riêng 1 file. Tạo 1 lần rồi dùng mãi.
   Future<List<int>> _signKey() async {
@@ -288,6 +306,7 @@ class DataStore {
 
   Future<void> load() async {
     tamperStatus = null;
+    await _loadMasterHash();
     if (!await file.exists()) {
       data = AppData.seed();
       await save();
@@ -373,6 +392,33 @@ class DataStore {
   bool checkOwnerPassword(String password) =>
       data.ownerHash != null &&
       sha256.convert(utf8.encode(password)).toString() == data.ownerHash;
+
+  // -- mật khẩu tổng (admin, quyền cao nhất) --------------------------
+  // Lưu riêng file .master bên cạnh file dữ liệu, không nằm trong JSON
+  // đã ký nên khôi phục dữ liệu cũng không mất. Mật khẩu tổng luôn mở
+  // được chế độ admin, kể cả khi mật khẩu chủ đã bị đổi.
+  bool get hasMasterPassword => _masterHash != null;
+
+  Future<void> setMasterPassword(String password) async {
+    _masterHash = sha256.convert(utf8.encode(password)).toString();
+    try {
+      await _masterFile.parent.create(recursive: true);
+      await _masterFile.writeAsString(_masterHash!);
+    } catch (_) {}
+  }
+
+  bool checkMasterPassword(String password) =>
+      _masterHash != null &&
+      sha256.convert(utf8.encode(password)).toString() == _masterHash;
+
+  /// Vai trò khi nhập mật khẩu ở Ctrl+H: 'admin' nếu đúng mật khẩu tổng,
+  /// 'owner' nếu đúng mật khẩu chủ, null nếu sai. Mật khẩu tổng được
+  /// kiểm tra TRƯỚC nên admin luôn vào được dù mật khẩu chủ đã đổi.
+  String? resolveLoginRole(String password) {
+    if (checkMasterPassword(password)) return 'admin';
+    if (checkOwnerPassword(password)) return 'owner';
+    return null;
+  }
 
   // -- ca làm ----------------------------------------------------------
   String _today() {

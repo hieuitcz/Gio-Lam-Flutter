@@ -131,17 +131,23 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage>
+    with SingleTickerProviderStateMixin {
   String? _employee;
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
   bool _ownerMode = false;
   DateTime _now = DateTime.now();
   int _tab = 0;
   String? _lastPdfPath;
+  // Điều khiển hiệu ứng nhấp nháy của nút ⓘ hỗ trợ.
+  late final AnimationController _pulseCtrl;
 
   @override
   void initState() {
     super.initState();
+    _pulseCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1200))
+      ..repeat(reverse: true);
     _employee = widget.store.data.employees.isNotEmpty
         ? widget.store.data.employees.first.name
         : null;
@@ -162,6 +168,53 @@ class _HomePageState extends State<HomePage> {
             'Khôi phục từ file.');
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  // Nút ⓘ hỗ trợ: icon indigo đặc trong vòng tròn tint + vòng lan tỏa
+  // nhấp nháy liên tục cho dễ nhận biết.
+  Widget _pulsingInfoButton() {
+    return AnimatedBuilder(
+      animation: _pulseCtrl,
+      builder: (context, child) {
+        final t = _pulseCtrl.value; // 0..1, lên xuống liên tục
+        return GestureDetector(
+          onTap: _showAboutDialog,
+          child: SizedBox(
+            width: 56,
+            height: 56,
+            child: Stack(alignment: Alignment.center, children: [
+              Transform.scale(
+                scale: 1.0 + t * 0.6,
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: iosIndigo.withValues(alpha: 0.25 * (1 - t)),
+                  ),
+                ),
+              ),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: iosIndigo.withValues(alpha: 0.12),
+                ),
+                child: const Icon(Icons.info,
+                    color: iosIndigo, size: 22),
+              ),
+            ]),
+          ),
+        );
+      },
+    );
   }
 
   // --- Giới thiệu + Hỗ trợ: ai cũng xem được (nut ⓘ ở đầu tab Chấm công) ---
@@ -1310,13 +1363,7 @@ class _HomePageState extends State<HomePage> {
                       letterSpacing: 1.5),
                 ),
               ),
-              CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                onPressed: _showAboutDialog,
-                child: const Icon(Icons.info_outline,
-                    color: _muted, size: 22),
-              ),
+              _pulsingInfoButton(),
             ]),
             const SizedBox(height: 14),
             const Text('Chấm công',

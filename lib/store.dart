@@ -17,8 +17,9 @@ const List<(String, String)> shiftStatuses = [
   ('holiday', 'Nghỉ lễ'),
 ];
 
-String shiftStatusTitle(String status) =>
-    shiftStatuses.firstWhere((s) => s.$1 == status, orElse: () => ('work', 'Đi làm')).$2;
+String shiftStatusTitle(String status) => shiftStatuses
+    .firstWhere((s) => s.$1 == status, orElse: () => ('work', 'Đi làm'))
+    .$2;
 
 class Employee {
   String name;
@@ -107,7 +108,16 @@ class AppData {
   // khi khởi động lại: chỉ tải dữ liệu cloud về khi bản cloud mới hơn
   // mốc này, tránh ghi đè giờ công nhập offline chưa kịp đẩy lên.
   int cloudUpdatedAt;
-  AppData({required this.storeName, required this.employees, Map<String, List<Shift>>? shifts, this.ownerHash, this.standardMinutesPerDay = 480, this.currency = 'Kč', this.fontFamily = 'Lexend', this.hidePay = true, this.cloudUpdatedAt = 0})
+  AppData(
+      {required this.storeName,
+      required this.employees,
+      Map<String, List<Shift>>? shifts,
+      this.ownerHash,
+      this.standardMinutesPerDay = 480,
+      this.currency = 'Kč',
+      this.fontFamily = 'Lexend',
+      this.hidePay = true,
+      this.cloudUpdatedAt = 0})
       : shifts = shifts ?? {};
 
   factory AppData.seed() => AppData(
@@ -118,7 +128,8 @@ class AppData {
   Map<String, dynamic> toJson() => {
         'storeName': storeName,
         'employees': employees.map((e) => e.toJson()).toList(),
-        'shifts': shifts.map((k, v) => MapEntry(k, v.map((s) => s.toJson()).toList())),
+        'shifts': shifts
+            .map((k, v) => MapEntry(k, v.map((s) => s.toJson()).toList())),
         'ownerHash': ownerHash,
         'standardMinutesPerDay': standardMinutesPerDay,
         'currency': currency,
@@ -132,16 +143,44 @@ class AppData {
         employees: (j['employees'] as List? ?? [])
             .map((e) => Employee.fromJson(e as Map<String, dynamic>))
             .toList(),
-        shifts: (j['shifts'] as Map<String, dynamic>? ?? {}).map((k, v) => MapEntry(
-            k,
-            (v as List).map((s) => Shift.fromJson(s as Map<String, dynamic>)).toList())),
+        shifts: (j['shifts'] as Map<String, dynamic>? ?? {}).map((k, v) =>
+            MapEntry(
+                k,
+                (v as List)
+                    .map((s) => Shift.fromJson(s as Map<String, dynamic>))
+                    .toList())),
         ownerHash: j['ownerHash'] as String?,
-        standardMinutesPerDay: (j['standardMinutesPerDay'] as num?)?.toInt() ?? 480,
+        standardMinutesPerDay:
+            (j['standardMinutesPerDay'] as num?)?.toInt() ?? 480,
         currency: j['currency'] as String? ?? 'Kč',
         fontFamily: j['fontFamily'] as String? ?? 'Lexend',
         hidePay: j['hidePay'] as bool? ?? true,
         cloudUpdatedAt: (j['cloudUpdatedAt'] as num?)?.toInt() ?? 0,
       );
+
+  /// Thêm 1 nhân viên mới. Trả về false nếu đã có nhân viên trùng tên
+  /// (tên nhân viên là khóa của bảng ca làm nên không được trùng).
+  bool addEmployee(Employee emp) {
+    if (employees.any((e) => e.name == emp.name)) return false;
+    employees.add(emp);
+    return true;
+  }
+
+  /// Chuyển nhân viên (kèm toàn bộ ca làm + ngày phép) sang dữ liệu của
+  /// cửa hàng khác. Trả về false nếu nhân viên không có ở đây hoặc cửa
+  /// hàng đích đã có nhân viên trùng tên. Chỉ đổi dữ liệu trong bộ nhớ —
+  /// bên gọi tự lưu/upload từng bên (upload đích TRƯỚC rồi mới lưu nguồn,
+  /// để lỗi giữa chừng không làm mất nhân viên).
+  bool moveEmployeeTo(AppData target, String name) {
+    final idx = employees.indexWhere((e) => e.name == name);
+    if (idx < 0) return false;
+    if (target.employees.any((e) => e.name == name)) return false;
+    final emp = employees.removeAt(idx);
+    target.employees.add(emp);
+    final list = shifts.remove(name);
+    if (list != null) target.shifts[name] = list;
+    return true;
+  }
 
   /// Tất cả đoạn ca của 1 ngày (đã sắp theo giờ vào).
   List<Shift> shiftsOn(String emp, String date) {
@@ -216,7 +255,8 @@ class AppData {
   }
 
   /// Số ngày nghỉ phép của nhân viên trong 1 tháng.
-  int monthLeaveDays(String emp, int year, int month, {String status = 'paidLeave'}) {
+  int monthLeaveDays(String emp, int year, int month,
+      {String status = 'paidLeave'}) {
     return monthShifts(emp, year, month)
         .where((s) => s.status == status)
         .map((s) => s.date)
@@ -322,7 +362,9 @@ class DataStore {
     try {
       final raw = await file.readAsString();
       final decoded = jsonDecode(raw);
-      if (decoded is Map && decoded.containsKey('sig') && decoded.containsKey('data')) {
+      if (decoded is Map &&
+          decoded.containsKey('sig') &&
+          decoded.containsKey('data')) {
         final key = await _signKey();
         if (_hmacHex(key, jsonEncode(decoded['data'])) == decoded['sig']) {
           data = AppData.fromJson(decoded['data'] as Map<String, dynamic>);
@@ -436,7 +478,8 @@ class DataStore {
   void clockIn(String emp, {DateTime? when}) {
     when ??= DateTime.now();
     if (data.openShift(emp) != null) {
-      throw StateError('Ca trước chưa tan ca. Tan ca trước đã rồi mới vào ca mới được.');
+      throw StateError(
+          'Ca trước chưa tan ca. Tan ca trước đã rồi mới vào ca mới được.');
     }
     final day = _dayStr(when);
     // Tan ca rồi vào ca lại được: 1 ngày nhiều đoạn ca (chạy nhiều
@@ -462,10 +505,12 @@ class DataStore {
     now ??= DateTime.now();
     final day = _dayStr(now);
     if (day != _today()) {
-      throw StateError('Chỉ nhập tay được trong đúng ngày hôm đó, không nhập ngày cũ được.');
+      throw StateError(
+          'Chỉ nhập tay được trong đúng ngày hôm đó, không nhập ngày cũ được.');
     }
     final minutes = parseHhmm(hhmm);
-    if (minutes == null) throw StateError('Giờ sai định dạng. Nhập dạng 9:00 hoặc 20:00.');
+    if (minutes == null)
+      throw StateError('Giờ sai định dạng. Nhập dạng 9:00 hoặc 20:00.');
     if (data.openShift(emp) != null) throw StateError('Ca trước chưa tan ca.');
     // Nhập tay tạo thêm 1 đoạn ca mới trong ngày (không ghi đè đoạn cũ).
     (data.shifts[emp] ??= []).add(Shift(day, clockIn: minutes, inManual: true));
@@ -475,12 +520,15 @@ class DataStore {
   Shift manualOut(String emp, String hhmm, {DateTime? now}) {
     now ??= DateTime.now();
     if (_dayStr(now) != _today()) {
-      throw StateError('Chỉ nhập tay được trong đúng ngày hôm đó, không nhập ngày cũ được.');
+      throw StateError(
+          'Chỉ nhập tay được trong đúng ngày hôm đó, không nhập ngày cũ được.');
     }
     final minutes = parseHhmm(hhmm);
-    if (minutes == null) throw StateError('Giờ sai định dạng. Nhập dạng 9:00 hoặc 20:00.');
+    if (minutes == null)
+      throw StateError('Giờ sai định dạng. Nhập dạng 9:00 hoặc 20:00.');
     final shift = data.openShift(emp);
-    if (shift == null) throw StateError('Chưa vào ca nên không nhập giờ ra được.');
+    if (shift == null)
+      throw StateError('Chưa vào ca nên không nhập giờ ra được.');
     final start = DateTime.parse(shift.date);
     if (now.difference(start).inDays > 1) {
       throw StateError('Ca này đã quá 1 ngày. Nhờ chủ cửa hàng sửa.');
@@ -512,7 +560,8 @@ class DataStore {
   ({int? ci, int? co}) _parseShiftTimes(
       String? clockIn, String? clockOut, int breakMinutes) {
     final ci = clockIn == null || clockIn.isEmpty ? null : parseHhmm(clockIn);
-    final co = clockOut == null || clockOut.isEmpty ? null : parseHhmm(clockOut);
+    final co =
+        clockOut == null || clockOut.isEmpty ? null : parseHhmm(clockOut);
     if ((clockIn != null && clockIn.isNotEmpty && ci == null) ||
         (clockOut != null && clockOut.isNotEmpty && co == null)) {
       throw StateError('Giờ sai định dạng. Nhập dạng 9:00 hoặc 20:00.');
@@ -539,8 +588,8 @@ class DataStore {
   }
 
   /// Chủ cửa hàng SỬA 1 đoạn ca có sẵn.
-  void ownerUpdateShift(Shift shift, String emp, String date, String? clockIn,
-      String? clockOut,
+  void ownerUpdateShift(
+      Shift shift, String emp, String date, String? clockIn, String? clockOut,
       {String status = 'work', int breakMinutes = 0, String note = ''}) {
     final t = _parseShiftTimes(clockIn, clockOut, breakMinutes);
     if (status == 'work') {

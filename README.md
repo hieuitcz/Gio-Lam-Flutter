@@ -139,7 +139,13 @@ chủ/admin trước):
    này cho cửa hàng, sau này không xem lại được.
 2. Thêm nhân viên cho cửa hàng đang xem ở **Cài đặt > Nhân viên**
    (nhân viên thêm/sửa/xóa luôn ghi vào đúng cửa hàng đang chọn
-   trong ô chọn ở đầu tab Chấm công).
+   trong ô chọn ở đầu tab Chấm công). Khi thêm nhân viên mới có ô
+   chọn **Cửa hàng** — chọn luôn cửa hàng muốn gán, không cần chuyển
+   màn hình sang đó trước. Muốn chuyển 1 nhân viên đã có sang cửa
+   hàng khác (vd sang tháng sau đổi cửa hàng): bấm nút ⇄ ở dòng
+   nhân viên đó, chọn cửa hàng đích — toàn bộ ca làm của người đó
+   chuyển theo. Không chuyển được nếu cửa hàng đích đã có nhân viên
+   trùng tên, hoặc cửa hàng nguồn chỉ còn 1 nhân viên.
 3. Gửi **bộ cài app** (file `ChamCongHTHSHOP-Setup-windows-N.exe`
    trong Release trên GitHub) cho cửa hàng đó. Cửa hàng cài xong,
    mở app nhập mã PIN là vào đúng cửa hàng của mình.

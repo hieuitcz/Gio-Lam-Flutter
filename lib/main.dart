@@ -1874,44 +1874,184 @@ class _HomePageState extends State<HomePage>
   Future<void> _addEmployee() async {
     final nameCtrl = TextEditingController();
     final rateCtrl = TextEditingController();
+    // Chọn cửa hàng khi thêm (chỉ chủ/admin, khi có >1 cửa hàng).
+    // Mặc định là cửa hàng đang xem.
+    final stores = {...cloudSync.storeIds, _s.data.storeName}.toList()..sort();
+    final canPick = cloudSync.canPickStore && stores.length > 1;
+    var targetStore = _s.data.storeName;
     final ok = await showCupertinoDialog<bool>(
       context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('Thêm nhân viên'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const SizedBox(height: 12),
-          CupertinoTextField(
-              style: const TextStyle(color: _ink),
-              controller: nameCtrl,
-              placeholder: 'Tên'),
-          const SizedBox(height: 8),
-          CupertinoTextField(
-              style: const TextStyle(color: _ink),
-              controller: rateCtrl,
-              placeholder: 'Đơn giá/giờ (vd 160)',
-              keyboardType: TextInputType.number),
-        ]),
-        actions: [
-          CupertinoDialogAction(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Hủy')),
-          CupertinoDialogAction(
-              isDefaultAction: true,
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Thêm')),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => CupertinoAlertDialog(
+          title: const Text('Thêm nhân viên'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            const SizedBox(height: 12),
+            CupertinoTextField(
+                style: const TextStyle(color: _ink),
+                controller: nameCtrl,
+                placeholder: 'Tên'),
+            const SizedBox(height: 8),
+            CupertinoTextField(
+                style: const TextStyle(color: _ink),
+                controller: rateCtrl,
+                placeholder: 'Đơn giá/giờ (vd 160)',
+                keyboardType: TextInputType.number),
+            if (canPick) ...[
+              const SizedBox(height: 12),
+              Row(children: [
+                const Text('Cửa hàng',
+                    style: TextStyle(color: _muted, fontSize: 14)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: _line)),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: targetStore,
+                        isExpanded: true,
+                        items: stores
+                            .map((id) => DropdownMenuItem(
+                                value: id,
+                                child: Text(id,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: _ink,
+                                        fontSize: 14))))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) setD(() => targetStore = v);
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ]),
+            ],
+          ]),
+          actions: [
+            CupertinoDialogAction(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Hủy')),
+            CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Thêm')),
+          ],
+        ),
       ),
     );
     if (ok != true) return;
+    final name = nameCtrl.text.trim();
     final rate = int.tryParse(rateCtrl.text.trim());
-    if (nameCtrl.text.trim().isEmpty || rate == null) {
+    if (name.isEmpty || rate == null) {
       _snack('Tên hoặc giá giờ không hợp lệ.');
       return;
     }
-    _s.data.employees.add(Employee(nameCtrl.text.trim(), rate));
-    setState(() => _employee = nameCtrl.text.trim());
-    await _save();
-    _snack('Đã thêm nhân viên.');
+    if (targetStore == _s.data.storeName) {
+      if (!_s.data.addEmployee(Employee(name, rate))) {
+        _snack('Đã có nhân viên tên $name.');
+        return;
+      }
+      setState(() => _employee = name);
+      await _save();
+      _snack('Đã thêm nhân viên.');
+      return;
+    }
+    // Thêm vào cửa hàng khác trên cloud (không cần chuyển màn hình).
+    setState(() => _cloudBusy = true);
+    try {
+      await cloudSync.addEmployeeToStore(targetStore, Employee(name, rate));
+      _snack('Đã thêm $name vào cửa hàng $targetStore.');
+    } on StateError catch (e) {
+      _snack(e.message);
+    } catch (e) {
+      _snack('Thêm nhân viên lỗi: $e');
+    } finally {
+      if (mounted) setState(() => _cloudBusy = false);
+    }
+  }
+
+  /// Chọn 1 cửa hàng trong danh sách (action sheet kiểu iOS).
+  Future<String?> _pickStore(List<String> stores, String title) {
+    return showCupertinoModalPopup<String>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: Text(title),
+        actions: [
+          for (final s in stores)
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.pop(ctx, s),
+              child: Text(s),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Hủy'),
+        ),
+      ),
+    );
+  }
+
+  /// Chuyển nhân viên (kèm toàn bộ ca làm) sang cửa hàng khác.
+  Future<void> _moveEmployee(Employee emp) async {
+    if (!cloudSync.canPickStore) {
+      _snack('Chưa đăng nhập chủ/admin.');
+      return;
+    }
+    if (_s.data.employees.length <= 1) {
+      _snack('Cửa hàng phải còn ít nhất 1 nhân viên.');
+      return;
+    }
+    final targets = {...cloudSync.storeIds, _s.data.storeName}.toList()
+      ..sort()
+      ..remove(_s.data.storeName);
+    if (targets.isEmpty) {
+      _snack('Chỉ có 1 cửa hàng, không chuyển được.');
+      return;
+    }
+    final target =
+        await _pickStore(targets, 'Chuyển ${emp.name} sang cửa hàng');
+    if (target == null) return;
+    final ok = await _confirm('Chuyển cửa hàng',
+        'Chuyển ${emp.name} cùng toàn bộ ca làm sang cửa hàng $target?');
+    if (!ok) return;
+    setState(() => _cloudBusy = true);
+    try {
+      final data = await cloudSync.fetchStoreData(target);
+      if (data == null) {
+        _snack(
+            'Không tải được dữ liệu cửa hàng $target. Kiểm tra mạng rồi thử lại.');
+        return;
+      }
+      // Chuyển trên bản sao trước: chỉ xóa ở cửa hàng hiện tại sau khi
+      // đã đẩy được lên cửa hàng đích, để lỗi giữa chừng không mất người.
+      final copy = AppData.fromJson(_s.data.toJson());
+      if (!copy.moveEmployeeTo(data, emp.name)) {
+        _snack(
+            'Cửa hàng $target đã có nhân viên ${emp.name}. Đổi tên trước rồi chuyển lại.');
+        return;
+      }
+      await cloudSync.uploadStoreData(target, data);
+      setState(() {
+        _s.data.employees.removeWhere((e) => e.name == emp.name);
+        _s.data.shifts.remove(emp.name);
+        if (_employee == emp.name && _s.data.employees.isNotEmpty) {
+          _employee = _s.data.employees.first.name;
+        }
+      });
+      await _save();
+      _snack('Đã chuyển ${emp.name} sang cửa hàng $target.');
+    } on StateError catch (e) {
+      _snack(e.message);
+    } catch (e) {
+      _snack('Chuyển cửa hàng lỗi: $e');
+    } finally {
+      if (mounted) setState(() => _cloudBusy = false);
+    }
   }
 
   Future<void> _removeEmployee(Employee emp) async {
@@ -3074,6 +3214,13 @@ class _HomePageState extends State<HomePage>
           '${e.annualLeaveAllowance > 0 ? ' · phép còn ${e.annualLeaveAllowance - _s.data.yearPaidLeaveUsed(e.name, DateTime.now().year)} ngày' : ''}',
           style: const TextStyle(color: _muted, fontSize: 13)),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (cloudSync.canPickStore &&
+            {...cloudSync.storeIds, _s.data.storeName}.length > 1)
+          IconButton(
+            icon: const Icon(Icons.swap_horiz, size: 18),
+            tooltip: 'Chuyển cửa hàng',
+            onPressed: () => _moveEmployee(e),
+          ),
         IconButton(
           icon: const Icon(Icons.edit, size: 18),
           onPressed: () => _editEmployee(e),

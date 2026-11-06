@@ -44,8 +44,7 @@ class PinConfig {
   final Map<String, String> storePins;
   final String? ownerPinHash;
   final String? adminPinHash;
-  PinConfig(
-      {required this.storePins, this.ownerPinHash, this.adminPinHash});
+  PinConfig({required this.storePins, this.ownerPinHash, this.adminPinHash});
 
   factory PinConfig.fromDoc(Map<String, dynamic>? d) {
     final stores = <String, String>{};
@@ -172,8 +171,8 @@ class CloudSync {
       }
       throw StateError('Chưa có mã PIN nào. Nhờ admin đặt mã PIN trước.');
     }
-    final resolved = resolvePinRole(
-        cfg.storePins, cfg.ownerPinHash, cfg.adminPinHash, pin);
+    final resolved =
+        resolvePinRole(cfg.storePins, cfg.ownerPinHash, cfg.adminPinHash, pin);
     if (resolved == null) throw StateError('Mã PIN không đúng.');
     final email = accountEmail(resolved.role, resolved.storeId);
     final pw = accountPassword(resolved.role, resolved.storeId, pin);
@@ -186,8 +185,7 @@ class CloudSync {
         await FirebaseAuth.instance
             .createUserWithEmailAndPassword(email: email, password: pw)
             .timeout(_cloudTimeout);
-      } else if (e.code == 'wrong-password' ||
-          e.code == 'invalid-credential') {
+      } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
         throw StateError('Mã PIN không đúng.');
       } else {
         rethrow;
@@ -219,8 +217,7 @@ class CloudSync {
           // Tài khoản admin đã tồn tại với 1 mã PIN khác (lần đặt
           // trước dở dang): không đoán được PIN cũ nên báo rõ để
           // admin đặt lại từ Console, thay vì báo mất mạng chung chung.
-          if (e2.code == 'wrong-password' ||
-              e2.code == 'invalid-credential') {
+          if (e2.code == 'wrong-password' || e2.code == 'invalid-credential') {
             throw StateError(
                 'Tài khoản admin đã tồn tại với mã PIN khác. Xóa tài khoản admin@gio-lam.local và doc pins/config trên Firebase Console rồi đặt lại mã PIN.');
           }
@@ -231,8 +228,10 @@ class CloudSync {
       }
     }
     final uid = cred.user!.uid;
-    await _db.collection('users').doc(uid).set(
-        {'storeId': '*', 'role': 'admin'}).timeout(_cloudTimeout);
+    await _db
+        .collection('users')
+        .doc(uid)
+        .set({'storeId': '*', 'role': 'admin'}).timeout(_cloudTimeout);
     final hash = pinHash(pin);
     await _db.collection('pins').doc('config').set({
       'stores': <String, String>{},
@@ -295,8 +294,7 @@ class CloudSync {
       bool created;
       try {
         final cred = await auth
-            .createUserWithEmailAndPassword(
-                email: email, password: password)
+            .createUserWithEmailAndPassword(email: email, password: password)
             .timeout(_cloudTimeout);
         uid = cred.user!.uid;
         created = true;
@@ -305,15 +303,13 @@ class CloudSync {
         // Tài khoản đã có: tìm UID qua users doc, không có thì đăng
         // nhập thử bằng mật khẩu mới (trường hợp tạo dở lần trước
         // với đúng PIN này).
-        final found =
-            await _findUserUid(storeId: storeId, role: role);
+        final found = await _findUserUid(storeId: storeId, role: role);
         if (found != null) {
           uid = found;
         } else {
           try {
             final cred = await auth
-                .signInWithEmailAndPassword(
-                    email: email, password: password)
+                .signInWithEmailAndPassword(email: email, password: password)
                 .timeout(_cloudTimeout);
             uid = cred.user!.uid;
           } catch (_) {
@@ -323,8 +319,10 @@ class CloudSync {
         }
         created = false;
       }
-      await _db.collection('users').doc(uid).set(
-          {'storeId': storeId, 'role': role}).timeout(_cloudTimeout);
+      await _db
+          .collection('users')
+          .doc(uid)
+          .set({'storeId': storeId, 'role': role}).timeout(_cloudTimeout);
       return (uid: uid, created: created);
     } finally {
       try {
@@ -397,13 +395,15 @@ class CloudSync {
     }, SetOptions(merge: true)).timeout(_cloudTimeout);
     final hash = pinHash(pin);
     try {
-      await _db.collection('pins').doc('config').update(
-          {'stores.$name': hash}).timeout(_cloudTimeout);
+      await _db
+          .collection('pins')
+          .doc('config')
+          .update({'stores.$name': hash}).timeout(_cloudTimeout);
     } catch (_) {
       // pins/config chưa tồn tại (trường hợp hiếm): tạo mới kèm map.
-      await _db.collection('pins').doc('config').set(
-          {'stores': {name: hash}},
-          SetOptions(merge: true)).timeout(_cloudTimeout);
+      await _db.collection('pins').doc('config').set({
+        'stores': {name: hash}
+      }, SetOptions(merge: true)).timeout(_cloudTimeout);
     }
     pinConfig?.storePins[name] = hash;
     await fetchStoreIds();
@@ -455,8 +455,7 @@ class CloudSync {
   /// hash nữa, thành ra khóa luôn tài khoản. Đổi PIN cần mã PIN hiện
   /// tại để đăng nhập vào app phụ rồi đổi mật khẩu; đặt lần đầu (tài
   /// khoản chưa có) thì không cần mã hiện tại.
-  Future<void> setRolePin(String kind, String pin,
-      {String? currentPin}) async {
+  Future<void> setRolePin(String kind, String pin, {String? currentPin}) async {
     if (!available || cloudRole != 'admin') {
       throw StateError('Chỉ admin mới đặt mã PIN.');
     }
@@ -502,14 +501,15 @@ class CloudSync {
           .doc('config')
           .update({field: hash}).timeout(_cloudTimeout);
     } catch (_) {
-      await _db.collection('pins').doc('config').set(
-          {field: hash}, SetOptions(merge: true)).timeout(_cloudTimeout);
+      await _db
+          .collection('pins')
+          .doc('config')
+          .set({field: hash}, SetOptions(merge: true)).timeout(_cloudTimeout);
     }
     if (pinConfig != null) {
       pinConfig = PinConfig(
         storePins: pinConfig!.storePins,
-        ownerPinHash:
-            kind == 'owner' ? hash : pinConfig!.ownerPinHash,
+        ownerPinHash: kind == 'owner' ? hash : pinConfig!.ownerPinHash,
         adminPinHash: kind == 'admin' ? hash : pinConfig!.adminPinHash,
       );
     }
@@ -524,11 +524,8 @@ class CloudSync {
     if (!signedIn) return;
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
-      final doc = await _db
-          .collection('users')
-          .doc(uid)
-          .get()
-          .timeout(_cloudTimeout);
+      final doc =
+          await _db.collection('users').doc(uid).get().timeout(_cloudTimeout);
       final d = doc.data();
       if (d != null) {
         final role = d['role'] as String?;
@@ -548,8 +545,7 @@ class CloudSync {
   Future<void> fetchStoreIds() async {
     if (!available) return;
     try {
-      final snap =
-          await _db.collection('stores').get().timeout(_cloudTimeout);
+      final snap = await _db.collection('stores').get().timeout(_cloudTimeout);
       storeIds = snap.docs.map((d) => d.id).toList()..sort();
     } catch (e) {
       lastSyncError = '$e';
@@ -625,8 +621,7 @@ class CloudSync {
       if (!shouldApplyRemote(remoteAt, s.data.cloudUpdatedAt)) {
         return false;
       }
-      s.data =
-          AppData.fromJson(Map<String, dynamic>.from(remoteData));
+      s.data = AppData.fromJson(Map<String, dynamic>.from(remoteData));
       s.data.cloudUpdatedAt = remoteAt;
       await s.save();
       lastSyncTime = DateTime.now();
@@ -678,10 +673,8 @@ class CloudSync {
       if (d == null) return false;
       final remoteData = d['data'];
       if (remoteData is! Map) return false;
-      s.data =
-          AppData.fromJson(Map<String, dynamic>.from(remoteData));
-      s.data.cloudUpdatedAt =
-          (d['updatedAt'] as num?)?.toInt() ?? 0;
+      s.data = AppData.fromJson(Map<String, dynamic>.from(remoteData));
+      s.data.cloudUpdatedAt = (d['updatedAt'] as num?)?.toInt() ?? 0;
       await s.save();
       lastSyncTime = DateTime.now();
       lastSyncError = null;
@@ -690,6 +683,61 @@ class CloudSync {
       lastSyncError = '$e';
       return false;
     }
+  }
+
+  /// Tải dữ liệu 1 cửa hàng về mà KHÔNG đổi dữ liệu local hiện tại.
+  /// Trả về null nếu chưa có doc hoặc mất mạng. Dùng khi thêm/chuyển
+  /// nhân viên sang cửa hàng khác mà không cần chuyển màn hình sang đó.
+  Future<AppData?> fetchStoreData(String storeId) async {
+    if (!available) return null;
+    try {
+      final doc = await _db
+          .collection('stores')
+          .doc(storeId)
+          .get()
+          .timeout(_cloudTimeout);
+      if (!doc.exists) return null;
+      final d = doc.data();
+      if (d == null) return null;
+      final remoteData = d['data'];
+      if (remoteData is! Map) return null;
+      final data = AppData.fromJson(Map<String, dynamic>.from(remoteData));
+      data.cloudUpdatedAt = (d['updatedAt'] as num?)?.toInt() ?? 0;
+      return data;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Đẩy 1 AppData (không phải dữ liệu local hiện tại) lên doc của
+  /// cửa hàng đó. Không chạm gì tới dữ liệu local trên máy.
+  Future<void> uploadStoreData(String storeId, AppData data) async {
+    if (!available) throw StateError('Chưa đăng nhập cloud.');
+    final now = DateTime.now().millisecondsSinceEpoch;
+    data.cloudUpdatedAt = now;
+    await _db.collection('stores').doc(storeId).set({
+      'data': data.toJson(),
+      'updatedAt': now,
+      'updatedBy': _updatedBy(),
+    }, SetOptions(merge: true)).timeout(_cloudTimeout);
+    lastSyncTime = DateTime.now();
+    lastSyncError = null;
+  }
+
+  /// Thêm nhân viên mới vào 1 cửa hàng khác (không phải cửa hàng đang
+  /// xem). Ném StateError nếu trùng tên hoặc không tải được dữ liệu.
+  Future<void> addEmployeeToStore(String storeId, Employee emp) async {
+    if (!available || !canPickStore) {
+      throw StateError('Chưa đăng nhập chủ/admin.');
+    }
+    final target = await fetchStoreData(storeId);
+    if (target == null) {
+      throw StateError('Không tải được dữ liệu cửa hàng $storeId.');
+    }
+    if (!target.addEmployee(emp)) {
+      throw StateError('Cửa hàng $storeId đã có nhân viên ${emp.name}.');
+    }
+    await uploadStoreData(storeId, target);
   }
 }
 

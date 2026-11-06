@@ -103,6 +103,13 @@ Mở app nhập mã PIN là vào luôn, không cần email/mật khẩu:
   coi như admin để đặt PIN luôn.
 - Mất mạng thì bấm "Dùng offline" vẫn chấm công bình thường, có mạng
   nhập PIN lại để đồng bộ.
+- **Đổi mã PIN chủ/admin**: trong Cài đặt > Quản trị, app hỏi thêm mã
+  PIN hiện tại — vì mật khẩu tài khoản suy ra từ PIN nên đổi PIN phải
+  đổi cả mật khẩu tài khoản, nếu không PIN mới sẽ không đăng nhập được.
+  Quên mã PIN hiện tại thì không đổi được trong app: xóa tài khoản
+  tương ứng (`admin@` / `owner@gio-lam.local`) trong Firebase Console
+  > Authentication và xóa field hash tương ứng trong doc `pins/config`
+  rồi đặt lại từ đầu (mất mã PIN cửa hàng thì chủ tạo lại cửa hàng).
 
 Kỹ thuật: hash mã PIN lưu công khai trong doc `pins/config`
 (collection `pins`, field `stores` là map tên cửa hàng -> hash PIN,

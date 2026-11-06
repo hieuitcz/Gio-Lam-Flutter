@@ -1029,14 +1029,28 @@ class _HomePageState extends State<HomePage>
   // đăng xuất rồi đăng nhập lại bằng PIN mới.
   Future<void> _setRolePin(String kind) async {
     final title = kind == 'owner' ? 'mã PIN chủ' : 'mã PIN admin';
+    // PIN đã có thì đây là ĐỔI pin: hỏi thêm mã PIN hiện tại để app
+    // đổi được cả mật khẩu tài khoản (mật khẩu suy ra từ PIN).
+    final exists = kind == 'owner'
+        ? cloudSync.pinConfig?.ownerPinHash != null
+        : cloudSync.pinConfig?.adminPinHash != null;
+    final curCtrl = TextEditingController();
     final pinCtrl = TextEditingController();
     final pin2Ctrl = TextEditingController();
     final ok = await showCupertinoDialog<bool>(
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
-        title: Text('Đặt $title'),
+        title: Text(exists ? 'Đổi $title' : 'Đặt $title'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 12),
+          if (exists)
+            CupertinoTextField(
+                controller: curCtrl,
+                placeholder: '$title hiện tại',
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                maxLength: 6),
+          if (exists) const SizedBox(height: 8),
           CupertinoTextField(
               controller: pinCtrl,
               placeholder: '$title mới (4-6 chữ số)',
@@ -1068,9 +1082,15 @@ class _HomePageState extends State<HomePage>
       _snack('Mã PIN gồm 4-6 chữ số và 2 lần nhập phải khớp.');
       return;
     }
+    final cur = curCtrl.text.trim();
+    if (exists && !isValidPin(cur)) {
+      _snack('Nhập mã PIN hiện tại để đổi.');
+      return;
+    }
     setState(() => _cloudBusy = true);
     try {
-      await cloudSync.setRolePin(kind, pin);
+      await cloudSync.setRolePin(kind, pin,
+          currentPin: exists ? cur : null);
       if (!mounted) return;
       setState(() => _cloudBusy = false);
       if (kind == 'admin') {
@@ -1083,10 +1103,10 @@ class _HomePageState extends State<HomePage>
       if (!mounted) return;
       setState(() => _cloudBusy = false);
       _snack(e.message);
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _cloudBusy = false);
-      _snack('Mất mạng, thử lại sau.');
+      _snack('Đổi mã PIN lỗi: $e');
     }
   }
 

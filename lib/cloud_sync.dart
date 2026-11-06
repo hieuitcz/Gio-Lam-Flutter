@@ -211,9 +211,21 @@ class CloudSync {
           .timeout(_cloudTimeout);
     } on FirebaseAuthException catch (e) {
       if (e.code == 'email-already-in-use') {
-        cred = await FirebaseAuth.instance
-            .signInWithEmailAndPassword(email: email, password: pw)
-            .timeout(_cloudTimeout);
+        try {
+          cred = await FirebaseAuth.instance
+              .signInWithEmailAndPassword(email: email, password: pw)
+              .timeout(_cloudTimeout);
+        } on FirebaseAuthException catch (e2) {
+          // Tài khoản admin đã tồn tại với 1 mã PIN khác (lần đặt
+          // trước dở dang): không đoán được PIN cũ nên báo rõ để
+          // admin đặt lại từ Console, thay vì báo mất mạng chung chung.
+          if (e2.code == 'wrong-password' ||
+              e2.code == 'invalid-credential') {
+            throw StateError(
+                'Tài khoản admin đã tồn tại với mã PIN khác. Xóa tài khoản admin@gio-lam.local và doc pins/config trên Firebase Console rồi đặt lại mã PIN.');
+          }
+          rethrow;
+        }
       } else {
         rethrow;
       }
@@ -258,8 +270,11 @@ class CloudSync {
   /// phiên chủ/admin hiện tại — createUser trên app chính sẽ đổi
   /// phiên đăng nhập) rồi tạo doc users/{uid} cho tài khoản đó.
   /// Tài khoản đã tồn tại thì dùng lại UID cũ (tìm qua users doc,
-  /// hoặc đăng nhập thử bằng mật khẩu mới trên app phụ). Trả về UID.
-  Future<String> _provisionAccount({
+  /// hoặc đăng nhập thử bằng mật khẩu mới trên app phụ). Trả về UID
+  /// và cờ created (true = vừa tạo mới, false = tài khoản đã có sẵn
+  /// — khi đó mật khẩu tài khoản vẫn là mật khẩu cũ, bên gọi phải tự
+  /// đổi mật khẩu nếu PIN thay đổi).
+  Future<({String uid, bool created})> _provisionAccount({
     required String email,
     required String password,
     required String storeId,
@@ -267,18 +282,24 @@ class CloudSync {
   }) async {
     FirebaseApp? secondary;
     try {
-      secondary = await Firebase.initializeApp(
-              name: 'provisioner',
-              options: DefaultFirebaseOptions.currentPlatform)
-          .timeout(_cloudTimeout);
+      try {
+        secondary = Firebase.app('provisioner');
+      } catch (_) {
+        secondary = await Firebase.initializeApp(
+                name: 'provisioner',
+                options: DefaultFirebaseOptions.currentPlatform)
+            .timeout(_cloudTimeout);
+      }
       final auth = FirebaseAuth.instanceFor(app: secondary);
       String uid;
+      bool created;
       try {
         final cred = await auth
             .createUserWithEmailAndPassword(
                 email: email, password: password)
             .timeout(_cloudTimeout);
         uid = cred.user!.uid;
+        created = true;
       } on FirebaseAuthException catch (e) {
         if (e.code != 'email-already-in-use') rethrow;
         // Tài khoản đã có: tìm UID qua users doc, không có thì đăng
@@ -300,10 +321,46 @@ class CloudSync {
                 'Tài khoản $email đã tồn tại, nhờ admin kiểm tra.');
           }
         }
+        created = false;
       }
       await _db.collection('users').doc(uid).set(
           {'storeId': storeId, 'role': role}).timeout(_cloudTimeout);
-      return uid;
+      return (uid: uid, created: created);
+    } finally {
+      try {
+        await secondary?.delete();
+      } catch (_) {}
+    }
+  }
+
+  /// Đổi mật khẩu 1 tài khoản Auth: đăng nhập bằng mật khẩu cũ trên
+  /// app phụ rồi gọi updatePassword (phiên vừa đăng nhập nên còn mới).
+  /// Sai mật khẩu cũ -> StateError để app báo rõ, không báo mất mạng.
+  Future<void> _updateAccountPassword({
+    required String email,
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    FirebaseApp? secondary;
+    try {
+      try {
+        secondary = Firebase.app('provisioner');
+      } catch (_) {
+        secondary = await Firebase.initializeApp(
+                name: 'provisioner',
+                options: DefaultFirebaseOptions.currentPlatform)
+            .timeout(_cloudTimeout);
+      }
+      final auth = FirebaseAuth.instanceFor(app: secondary);
+      final cred = await auth
+          .signInWithEmailAndPassword(email: email, password: oldPassword)
+          .timeout(_cloudTimeout);
+      await cred.user!.updatePassword(newPassword).timeout(_cloudTimeout);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        throw StateError('Mã PIN hiện tại không đúng.');
+      }
+      rethrow;
     } finally {
       try {
         await secondary?.delete();
@@ -391,7 +448,15 @@ class CloudSync {
   /// trong pins/config. Đổi mã PIN admin xong thì phiên admin hiện
   /// tại mất quyền (doc users của nó vừa bị xóa) nên bên gọi phải
   /// đăng xuất rồi đăng nhập lại bằng PIN mới.
-  Future<void> setRolePin(String kind, String pin) async {
+  /// Đặt/đổi mã PIN chủ/admin. Mật khẩu tài khoản Firebase Auth suy ra
+  /// từ PIN (xem logic.dart) nên ĐỔI PIN PHẢI ĐỔI CẢ MẬT KHẨU tài
+  /// khoản — bản trước chỉ đổi hash trong pins/config nên PIN mới
+  /// không đăng nhập được (sai mật khẩu) mà PIN cũ cũng không khớp
+  /// hash nữa, thành ra khóa luôn tài khoản. Đổi PIN cần mã PIN hiện
+  /// tại để đăng nhập vào app phụ rồi đổi mật khẩu; đặt lần đầu (tài
+  /// khoản chưa có) thì không cần mã hiện tại.
+  Future<void> setRolePin(String kind, String pin,
+      {String? currentPin}) async {
     if (!available || cloudRole != 'admin') {
       throw StateError('Chỉ admin mới đặt mã PIN.');
     }
@@ -400,8 +465,20 @@ class CloudSync {
     }
     final email = accountEmail(kind, '*');
     final pw = accountPassword(kind, '*', pin);
-    final uid = await _provisionAccount(
+    final provisioned = await _provisionAccount(
         email: email, password: pw, storeId: '*', role: kind);
+    final uid = provisioned.uid;
+    // Tài khoản đã tồn tại (đổi PIN): đổi mật khẩu tài khoản thành
+    // mật khẩu suy ra từ PIN mới, đăng nhập bằng PIN cũ trước.
+    if (!provisioned.created) {
+      if (currentPin == null || currentPin.isEmpty) {
+        throw StateError('Đổi mã PIN cần nhập mã PIN hiện tại.');
+      }
+      await _updateAccountPassword(
+          email: email,
+          oldPassword: accountPassword(kind, '*', currentPin),
+          newPassword: pw);
+    }
     // Xóa doc users cũ của vai trò này (trừ doc vừa tạo).
     try {
       final q = await _db

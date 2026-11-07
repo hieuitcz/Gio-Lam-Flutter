@@ -3155,13 +3155,20 @@ class _HomePageState extends State<HomePage>
             child: Column(children: [
               ListTile(
                 leading: const IconTile(icon: Icons.cloud, tint: _accent),
+                // Dòng vai trò/quyền ("admin (xem được hết)") chỉ hiện
+                // khi admin đăng nhập — chủ cửa hàng không thấy, để
+                // chủ tưởng mình là cao nhất.
                 title: Text(cloudSync.signedIn
-                    ? 'Đã vào bằng mã PIN: ${cloudSync.cloudRole == 'admin' ? 'admin (xem được hết)' : cloudSync.cloudRole == 'owner' ? 'chủ (xem được hết)' : 'cửa hàng ${cloudSync.cloudStoreId ?? _s.data.storeName}'}'
+                    ? _isAdmin
+                        ? 'Đã vào bằng mã PIN: admin (xem được hết)'
+                        : 'Đã vào bằng mã PIN'
                     : cloudSync.firebaseReady
                         ? 'Chưa nhập mã PIN'
                         : 'Chưa bật đồng bộ (mất mạng hoặc chưa cấu hình)'),
                 subtitle: Text(cloudSync.signedIn
-                    ? 'Quyền: ${cloudSync.cloudRole ?? 'store'} · ${cloudSync.cloudStoreId == '*' ? 'xem được hết các cửa hàng' : 'cửa hàng ${cloudSync.cloudStoreId ?? _s.data.storeName}'}'
+                    ? _isAdmin
+                        ? 'Quyền: admin · xem được hết các cửa hàng'
+                        : 'Đã đăng nhập đồng bộ.'
                     : 'Dữ liệu vẫn lưu local trên máy, có mạng nhập mã PIN lại để đồng bộ.'),
               ),
               if (cloudSync.lastSyncTime != null) ...[

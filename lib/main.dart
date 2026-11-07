@@ -24,7 +24,8 @@ import 'store.dart';
 // không thấy tiền), chủ cửa hàng (tài khoản quản lý, thấy đầy đủ app),
 // admin (quyền cao nhất, đầy đủ như chủ + mục Quản trị riêng).
 // Tab Cài đặt chỉ chủ/admin mới thấy — không có nút hiện ra ngoài,
-// mở bằng phím tắt Ctrl+H rồi nhập mật khẩu (chủ hoặc tổng).
+// mở bằng phím tắt Ctrl+H rồi nhập mật khẩu (chủ hoặc tổng) hoặc
+// mã PIN cloud (chủ/admin/cửa hàng).
 
 const _ink = iosLabel;
 const _muted = iosSecondary;
@@ -1463,7 +1464,10 @@ class _HomePageState extends State<HomePage>
 
   // Đăng nhập 3 vai trò bằng Ctrl+H: nhập mật khẩu 1 lần, kiểm tra mật
   // khẩu tổng TRƯỚC (đúng -> admin), rồi mới kiểm tra mật khẩu chủ
-  // (đúng -> chủ). Nhấn Ctrl+H lần nữa thì thoát về nhân viên.
+  // (đúng -> chủ). Mật khẩu local chạy cả khi mất mạng. Nhập mã PIN
+  // cloud thì đăng nhập lại bằng PIN, đổi luôn phiên cloud để xem
+  // được hết các cửa hàng (PIN chủ -> chủ, PIN admin -> admin).
+  // Nhấn Ctrl+H lần nữa thì thoát về nhân viên.
   Future<void> _ownerLogin() async {
     if (_role != 'employee') {
       final wasAdmin = _isAdmin;
@@ -1488,20 +1492,41 @@ class _HomePageState extends State<HomePage>
       await _save();
       _snack('Đã đặt mật khẩu. Giữ kỹ mật khẩu này.');
     }
-    final pw = await _askPassword('Nhập mật khẩu');
+    final pw = await _askPassword('Nhập mật khẩu hoặc mã PIN');
     if (pw == null) return;
     final role = _s.resolveLoginRole(pw);
-    if (role == null) {
-      _snack('Mật khẩu không đúng.');
+    if (role != null) {
+      setState(() {
+        _role = role;
+        _tab = 2;
+      });
+      _snack(role == 'admin'
+          ? 'Đã vào chế độ admin.'
+          : 'Đã vào chế độ chủ cửa hàng.');
       return;
     }
-    setState(() {
-      _role = role;
-      _tab = 2;
-    });
-    _snack(role == 'admin'
-        ? 'Đã vào chế độ admin.'
-        : 'Đã vào chế độ chủ cửa hàng.');
+    // Mã PIN cloud: đăng nhập lại bằng PIN, đổi luôn phiên cloud.
+    if (isValidPin(pw)) {
+      try {
+        await cloudSync.signInWithPin(pw);
+        await _afterCloudSignIn();
+      } on StateError catch (e) {
+        if (mounted) _snack(e.message);
+        return;
+      } catch (_) {
+        if (mounted) _snack('Mất mạng, thử lại sau.');
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _tab = 2);
+      _snack(cloudSync.cloudRole == 'admin'
+          ? 'Đã vào bằng mã PIN admin.'
+          : cloudSync.cloudRole == 'owner'
+              ? 'Đã vào bằng mã PIN chủ.'
+              : 'Đã vào cửa hàng ${cloudSync.cloudStoreId ?? _s.data.storeName}.');
+      return;
+    }
+    _snack('Mật khẩu không đúng.');
   }
 
   // Đổi mật khẩu chủ: hỏi mật khẩu hiện tại trước — chấp nhận mật khẩu
@@ -3351,9 +3376,9 @@ class _HomePageState extends State<HomePage>
                 const ListTile(
                   leading: IconTile(icon: Icons.info, tint: _muted),
                   title: Text(
-                      'Mã PIN cloud khác mật khẩu tổng local (Ctrl+H): PIN để vào app + đồng bộ, mật khẩu tổng để mở chế độ admin trên máy này kể cả khi mất mạng.'),
+                      'Ctrl+H nhận cả mật khẩu tổng local lẫn mã PIN cloud: mật khẩu tổng mở chế độ admin trên máy này kể cả khi mất mạng, mã PIN chủ/admin đăng nhập lại bằng PIN để xem được hết các cửa hàng.'),
                   subtitle: Text(
-                      'Đổi mã PIN cửa hàng chưa có ở bản này — chủ tạo lại cửa hàng mới rồi xóa cửa hàng cũ nếu cần đổi PIN.'),
+                      'Đổi mã PIN cửa hàng ở mục Cửa hàng (nút chìa khóa).'),
                 ),
                 const Divider(height: 1, color: _line),
                 ListTile(

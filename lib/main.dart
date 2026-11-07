@@ -24,8 +24,8 @@ import 'store.dart';
 // không thấy tiền), chủ cửa hàng (tài khoản quản lý, thấy đầy đủ app),
 // admin (quyền cao nhất, đầy đủ như chủ + mục Quản trị riêng).
 // Tab Cài đặt chỉ chủ/admin mới thấy — không có nút hiện ra ngoài,
-// mở bằng phím tắt Ctrl+H rồi nhập mật khẩu (chủ hoặc tổng) hoặc
-// mã PIN cloud (chủ/admin/cửa hàng).
+// mở bằng phím tắt Ctrl+H rồi nhập mã PIN (chủ/admin/cửa hàng)
+// hoặc mã PIN tổng.
 
 const _ink = iosLabel;
 const _muted = iosSecondary;
@@ -1146,8 +1146,12 @@ class _HomePageState extends State<HomePage>
   // Admin ĐẶT/ĐỔI mã PIN chủ hoặc mã PIN admin (mục Quản trị).
   // Đổi mã PIN admin xong thì phiên admin hiện tại mất quyền nên phải
   // đăng xuất rồi đăng nhập lại bằng PIN mới.
-  Future<void> _setRolePin(String kind) async {
-    final title = kind == 'owner' ? 'mã PIN chủ' : 'mã PIN admin';
+  Future<void> _setRolePin(String kind, {bool self = false}) async {
+    final title = self
+        ? 'mã PIN quản lý cửa hàng'
+        : kind == 'owner'
+            ? 'mã PIN chủ'
+            : 'mã PIN admin';
     // PIN đã có thì đây là ĐỔI pin: hỏi thêm mã PIN hiện tại để app
     // đổi được cả mật khẩu tài khoản (mật khẩu suy ra từ PIN).
     final exists = kind == 'owner'
@@ -1166,7 +1170,7 @@ class _HomePageState extends State<HomePage>
             CupertinoTextField(
                 style: const TextStyle(color: _ink),
                 controller: curCtrl,
-                placeholder: '$title hiện tại',
+                placeholder: 'Mã PIN hiện tại',
                 keyboardType: TextInputType.number,
                 obscureText: true,
                 maxLength: 6),
@@ -1174,7 +1178,7 @@ class _HomePageState extends State<HomePage>
           CupertinoTextField(
               style: const TextStyle(color: _ink),
               controller: pinCtrl,
-              placeholder: '$title mới (4-6 chữ số)',
+              placeholder: 'Mã PIN mới (4-6 chữ số)',
               keyboardType: TextInputType.number,
               obscureText: true,
               maxLength: 6),
@@ -1182,7 +1186,7 @@ class _HomePageState extends State<HomePage>
           CupertinoTextField(
               style: const TextStyle(color: _ink),
               controller: pin2Ctrl,
-              placeholder: 'Nhập lại $title',
+              placeholder: 'Nhập lại mã PIN',
               keyboardType: TextInputType.number,
               obscureText: true,
               maxLength: 6),
@@ -1217,6 +1221,10 @@ class _HomePageState extends State<HomePage>
       if (kind == 'admin') {
         _snack('Đã đổi mã PIN admin. Đăng nhập lại bằng mã PIN mới.');
         await _cloudSignOut();
+      } else if (self) {
+        _snack(exists
+            ? 'Đã đổi mã PIN quản lý cửa hàng.'
+            : 'Đã đặt mã PIN quản lý cửa hàng.');
       } else {
         _snack('Đã đặt $title. Báo mã này cho chủ cửa hàng.');
       }
@@ -1383,7 +1391,7 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  // --- Hỏi giờ / mật khẩu (dialog iOS) ---
+  // --- Hỏi giờ / mã PIN (dialog iOS) ---
   Future<String?> _askTime(String title, String initial) async {
     final ctrl = TextEditingController(text: initial);
     return showCupertinoDialog<String>(
@@ -1425,7 +1433,7 @@ class _HomePageState extends State<HomePage>
             controller: ctrl,
             obscureText: true,
             autofocus: true,
-            placeholder: 'Mật khẩu',
+            placeholder: 'Mã PIN',
           ),
         ),
         actions: [
@@ -1462,9 +1470,9 @@ class _HomePageState extends State<HomePage>
     return ok == true;
   }
 
-  // Đăng nhập 3 vai trò bằng Ctrl+H: nhập mật khẩu 1 lần, kiểm tra mật
-  // khẩu tổng TRƯỚC (đúng -> admin), rồi mới kiểm tra mật khẩu chủ
-  // (đúng -> chủ). Mật khẩu local chạy cả khi mất mạng. Nhập mã PIN
+  // Đăng nhập 3 vai trò bằng Ctrl+H: nhập mã 1 lần, kiểm tra mã PIN
+  // tổng TRƯỚC (đúng -> admin), rồi mới kiểm tra mã PIN quản lý
+  // (đúng -> chủ). Mã PIN tổng chạy cả khi mất mạng. Nhập mã PIN
   // cloud thì đăng nhập lại bằng PIN, đổi luôn phiên cloud để xem
   // được hết các cửa hàng (PIN chủ -> chủ, PIN admin -> admin).
   // Nhấn Ctrl+H lần nữa thì thoát về nhân viên.
@@ -1481,18 +1489,18 @@ class _HomePageState extends State<HomePage>
       return;
     }
     if (!_s.ownerPasswordSet) {
-      final pw = await _askPassword('Đặt mật khẩu chủ lần đầu');
+      final pw = await _askPassword('Đặt mã PIN quản lý lần đầu');
       if (pw == null || pw.isEmpty) return;
-      final pw2 = await _askPassword('Nhập lại mật khẩu');
+      final pw2 = await _askPassword('Nhập lại mã PIN');
       if (pw != pw2) {
         _snack('Hai lần nhập không khớp.');
         return;
       }
       _s.setOwnerPassword(pw);
       await _save();
-      _snack('Đã đặt mật khẩu. Giữ kỹ mật khẩu này.');
+      _snack('Đã đặt mã PIN. Giữ kỹ mã này.');
     }
-    final pw = await _askPassword('Nhập mật khẩu hoặc mã PIN');
+    final pw = await _askPassword('Nhập mã PIN');
     if (pw == null) return;
     final role = _s.resolveLoginRole(pw);
     if (role != null) {
@@ -1526,75 +1534,53 @@ class _HomePageState extends State<HomePage>
               : 'Đã vào cửa hàng ${cloudSync.cloudStoreId ?? _s.data.storeName}.');
       return;
     }
-    _snack('Mật khẩu không đúng.');
+    _snack('Mã PIN không đúng.');
   }
 
-  // Đổi mật khẩu chủ: hỏi mật khẩu hiện tại trước — chấp nhận mật khẩu
-  // chủ cũ HOẶC mật khẩu tổng (để admin đổi được mà không cần biết
-  // mật khẩu chủ cũ) — rồi mới nhập mật khẩu mới 2 lần.
-  Future<void> _changeOwnerPassword() async {
-    final current = await _askPassword('Mật khẩu hiện tại');
-    if (current == null) return;
-    if (_s.resolveLoginRole(current) == null) {
-      _snack('Mật khẩu hiện tại không đúng.');
-      return;
-    }
-    final pw = await _askPassword('Mật khẩu chủ mới');
-    if (pw == null || pw.isEmpty) return;
-    final pw2 = await _askPassword('Nhập lại mật khẩu mới');
-    if (pw != pw2) {
-      _snack('Hai lần nhập không khớp.');
-      return;
-    }
-    _s.setOwnerPassword(pw);
-    await _save();
-    _snack('Đã đổi mật khẩu chủ.');
-  }
-
-  // --- Mật khẩu tổng (admin) -------------------------------------------
-  // Đặt lần đầu (chưa có mật khẩu tổng): nhập mới 2 lần.
+  // --- Mã PIN tổng (admin) -------------------------------------------
+  // Đặt lần đầu (chưa có mã PIN tổng): nhập mới 2 lần.
   Future<void> _setMasterPassword() async {
-    final pw = await _askPassword('Đặt mật khẩu tổng');
+    final pw = await _askPassword('Đặt mã PIN tổng');
     if (pw == null || pw.isEmpty) return;
-    final pw2 = await _askPassword('Nhập lại mật khẩu tổng');
+    final pw2 = await _askPassword('Nhập lại mã PIN tổng');
     if (pw != pw2) {
       _snack('Hai lần nhập không khớp.');
       return;
     }
     await _s.setMasterPassword(pw);
     setState(() {});
-    _snack('Đã đặt mật khẩu tổng. Chỉ anh biết mật khẩu này.');
+    _snack('Đã đặt mã PIN tổng. Chỉ anh biết mã này.');
   }
 
-  // Đổi mật khẩu tổng (chỉ admin): nhập mật khẩu tổng cũ + mới 2 lần.
+  // Đổi mã PIN tổng (chỉ admin): nhập mã PIN tổng cũ + mới 2 lần.
   Future<void> _changeMasterPassword() async {
-    final current = await _askPassword('Mật khẩu tổng hiện tại');
+    final current = await _askPassword('Mã PIN tổng hiện tại');
     if (current == null) return;
     if (!_s.checkMasterPassword(current)) {
-      _snack('Mật khẩu tổng hiện tại không đúng.');
+      _snack('Mã PIN tổng hiện tại không đúng.');
       return;
     }
-    final pw = await _askPassword('Mật khẩu tổng mới');
+    final pw = await _askPassword('Mã PIN tổng mới');
     if (pw == null || pw.isEmpty) return;
-    final pw2 = await _askPassword('Nhập lại mật khẩu tổng mới');
+    final pw2 = await _askPassword('Nhập lại mã PIN tổng mới');
     if (pw != pw2) {
       _snack('Hai lần nhập không khớp.');
       return;
     }
     await _s.setMasterPassword(pw);
-    _snack('Đã đổi mật khẩu tổng.');
+    _snack('Đã đổi mã PIN tổng.');
   }
 
-  // Admin đặt lại mật khẩu chủ mà không cần biết mật khẩu chủ cũ:
-  // nhập mật khẩu tổng + mật khẩu chủ mới 2 lần.
+  // Admin đặt lại mật khẩu quản lý mà không cần biết mật khẩu cũ:
+  // nhập mã PIN tổng + mật khẩu quản lý mới 2 lần.
   Future<void> _resetOwnerPassword() async {
-    final master = await _askPassword('Mật khẩu tổng');
+    final master = await _askPassword('Mã PIN tổng');
     if (master == null) return;
     if (!_s.checkMasterPassword(master)) {
-      _snack('Mật khẩu tổng không đúng.');
+      _snack('Mã PIN tổng không đúng.');
       return;
     }
-    final pw = await _askPassword('Mật khẩu chủ mới');
+    final pw = await _askPassword('Mật khẩu quản lý mới');
     if (pw == null || pw.isEmpty) return;
     final pw2 = await _askPassword('Nhập lại mật khẩu mới');
     if (pw != pw2) {
@@ -1603,7 +1589,7 @@ class _HomePageState extends State<HomePage>
     }
     _s.setOwnerPassword(pw);
     await _save();
-    _snack('Đã đặt lại mật khẩu chủ.');
+    _snack('Đã đặt lại mật khẩu quản lý cửa hàng.');
   }
 
   // --- Sửa/thêm từng ngày (EntryEditor kiểu iOS) ---
@@ -3285,14 +3271,18 @@ class _HomePageState extends State<HomePage>
           AppCard(
             padding: EdgeInsets.zero,
             child: Column(children: [
-              ListTile(
-                leading: const IconTile(icon: Icons.lock, tint: _accent),
-                title: const Text('Đổi mật khẩu chủ'),
-                trailing:
-                    const Icon(Icons.chevron_right, size: 16, color: _muted),
-                onTap: _changeOwnerPassword,
-              ),
-              const Divider(height: 1, color: _line),
+              if (!_isAdmin) ...[
+                ListTile(
+                  leading: const IconTile(icon: Icons.lock, tint: _accent),
+                  title: const Text('Đổi mã PIN quản lý cửa hàng'),
+                  trailing:
+                      const Icon(Icons.chevron_right, size: 16, color: _muted),
+                  onTap: _cloudBusy
+                      ? null
+                      : () => _setRolePin('owner', self: true),
+                ),
+                const Divider(height: 1, color: _line),
+              ],
               ListTile(
                 leading: const IconTile(icon: Icons.lock_open, tint: _danger),
                 title: Text(
@@ -3305,8 +3295,8 @@ class _HomePageState extends State<HomePage>
             ]),
           ),
           // --- Mục Quản trị (admin) ---
-          // Chưa có mật khẩu tổng: chủ đặt mật khẩu tổng ở đây.
-          // Đã có mật khẩu tổng: mục này CHỈ hiện ở chế độ admin.
+          // Chưa có mã PIN tổng: chủ đặt mã PIN tổng ở đây.
+          // Đã có mã PIN tổng: mục này CHỈ hiện ở chế độ admin.
           if (!_s.hasMasterPassword) ...[
             const SizedBox(height: 20),
             const AppSectionHeader(
@@ -3317,9 +3307,9 @@ class _HomePageState extends State<HomePage>
               child: ListTile(
                 leading: const IconTile(
                     icon: Icons.admin_panel_settings, tint: _accent),
-                title: const Text('Đặt mật khẩu tổng'),
+                title: const Text('Đặt mã PIN tổng'),
                 subtitle: const Text(
-                    'Mật khẩu quyền cao nhất, luôn vào được dù mật khẩu chủ đã đổi'),
+                    'Mã quyền cao nhất, luôn vào được dù mã PIN quản lý cửa hàng đã đổi'),
                 trailing:
                     const Icon(Icons.chevron_right, size: 16, color: _muted),
                 onTap: _setMasterPassword,
@@ -3337,7 +3327,7 @@ class _HomePageState extends State<HomePage>
                 ListTile(
                   leading: const IconTile(
                       icon: Icons.admin_panel_settings, tint: _accent),
-                  title: const Text('Đổi mật khẩu tổng'),
+                  title: const Text('Đổi mã PIN tổng'),
                   trailing:
                       const Icon(Icons.chevron_right, size: 16, color: _muted),
                   onTap: _changeMasterPassword,
@@ -3346,8 +3336,8 @@ class _HomePageState extends State<HomePage>
                 ListTile(
                   leading:
                       const IconTile(icon: Icons.lock_reset, tint: _accent),
-                  title: const Text('Đặt lại mật khẩu chủ'),
-                  subtitle: const Text('Không cần biết mật khẩu chủ cũ'),
+                  title: const Text('Đặt lại mật khẩu quản lý cửa hàng'),
+                  subtitle: const Text('Không cần biết mật khẩu quản lý cũ'),
                   trailing:
                       const Icon(Icons.chevron_right, size: 16, color: _muted),
                   onTap: _resetOwnerPassword,
@@ -3376,7 +3366,7 @@ class _HomePageState extends State<HomePage>
                 const ListTile(
                   leading: IconTile(icon: Icons.info, tint: _muted),
                   title: Text(
-                      'Ctrl+H nhận cả mật khẩu tổng local lẫn mã PIN cloud: mật khẩu tổng mở chế độ admin trên máy này kể cả khi mất mạng, mã PIN chủ/admin đăng nhập lại bằng PIN để xem được hết các cửa hàng.'),
+                      'Ctrl+H nhận cả mã PIN tổng lẫn mã PIN cloud: mã PIN tổng mở chế độ admin trên máy này kể cả khi mất mạng, mã PIN chủ/admin đăng nhập lại bằng PIN để xem được hết các cửa hàng.'),
                   subtitle: Text(
                       'Đổi mã PIN cửa hàng ở mục Cửa hàng (nút chìa khóa).'),
                 ),

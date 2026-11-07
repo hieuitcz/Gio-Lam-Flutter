@@ -583,7 +583,10 @@ class CloudSync {
   /// tại để đăng nhập vào app phụ rồi đổi mật khẩu; đặt lần đầu (tài
   /// khoản chưa có) thì không cần mã hiện tại.
   Future<void> setRolePin(String kind, String pin, {String? currentPin}) async {
-    if (!available || cloudRole != 'admin') {
+    // Admin đặt được mọi mã PIN; chủ cửa hàng chỉ đổi được mã PIN
+    // của chính mình (cần nhập mã PIN hiện tại).
+    if (!available ||
+        (cloudRole != 'admin' && !(cloudRole == 'owner' && kind == 'owner'))) {
       throw StateError('Chỉ admin mới đặt mã PIN.');
     }
     if (kind != 'owner' && kind != 'admin') {

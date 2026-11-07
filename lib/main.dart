@@ -762,7 +762,7 @@ class _HomePageState extends State<HomePage>
         final ok = await cloudSync.switchStore(_s, target);
         if (!ok && mounted) {
           _snack(
-              'Tài khoản này là của cửa hàng $target, máy đang giữ dữ liệu cửa hàng ${_s.data.storeName}. Nhờ admin kiểm tra.');
+              'Tài khoản này là của cửa hàng $target, máy đang giữ dữ liệu cửa hàng ${_s.data.storeName}. Nhờ chủ cửa hàng kiểm tra.');
         }
       }
     }
@@ -920,7 +920,7 @@ class _HomePageState extends State<HomePage>
   // hàng đó; cửa hàng nhập PIN là vào đúng cửa hàng của mình.
   Future<void> _addStore() async {
     if (!cloudSync.available || !cloudSync.canPickStore) {
-      _snack('Chưa đăng nhập chủ/admin.');
+      _snack('Chưa đăng nhập chủ cửa hàng.');
       return;
     }
     final nameCtrl = TextEditingController();
@@ -1023,7 +1023,7 @@ class _HomePageState extends State<HomePage>
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
         title: Text('Mã PIN cửa hàng $storeId'),
-        content: Text('Mã PIN là: $pin\nChỉ chủ/admin xem được mã này.'),
+        content: Text('Mã PIN là: $pin\nChỉ chủ cửa hàng xem được mã này.'),
         actions: [
           CupertinoDialogAction(
               isDefaultAction: true,
@@ -1102,7 +1102,7 @@ class _HomePageState extends State<HomePage>
   // cloud làm cửa hàng sống lại.
   Future<void> _deleteStore(String storeName) async {
     if (!cloudSync.available || !cloudSync.canPickStore) {
-      _snack('Chưa đăng nhập chủ/admin.');
+      _snack('Chưa đăng nhập chủ cửa hàng.');
       return;
     }
     if (storeName == _s.data.storeName) {
@@ -1251,7 +1251,7 @@ class _HomePageState extends State<HomePage>
               Text(
                 setup
                     ? 'Chưa có mã PIN nào. Người mở app đầu tiên đặt mã PIN admin (4-6 chữ số) — mã này mở được tất cả các cửa hàng. Giữ kỹ mã PIN này.'
-                    : 'Nhập mã PIN của cửa hàng (do chủ cấp) để vào đúng cửa hàng đó. Mã PIN chủ/admin thì xem được hết các cửa hàng. Mất mạng vẫn dùng được offline.',
+                    : 'Nhập mã PIN của cửa hàng (do chủ cấp) để vào đúng cửa hàng đó. Mã PIN chủ thì xem được hết các cửa hàng. Mất mạng vẫn dùng được offline.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: _muted, fontSize: 14),
               ),
@@ -1577,7 +1577,7 @@ class _HomePageState extends State<HomePage>
         : day == _todayStr;
     if (!editable && !_isOwner) {
       _snack(
-          'Ngày đã qua bạn không có quyền sửa hãy liên hệ admin để được trợ giúp');
+          'Ngày đã qua bạn không có quyền sửa, hãy liên hệ chủ cửa hàng để được trợ giúp');
       return;
     }
     final inCtrl = TextEditingController(
@@ -1873,7 +1873,7 @@ class _HomePageState extends State<HomePage>
                                         : canEmployeeAddShift(dstr));
                                 if (!allowed) {
                                   _snack(
-                                      'Ngày đã qua bạn không có quyền sửa hãy liên hệ admin để được trợ giúp');
+                                      'Ngày đã qua bạn không có quyền sửa, hãy liên hệ chủ cửa hàng để được trợ giúp');
                                   return;
                                 }
                                 try {
@@ -2117,7 +2117,7 @@ class _HomePageState extends State<HomePage>
   /// khỏi cửa hàng này, ca làm chuyển theo).
   Future<void> _employeeStoreAction(Employee emp) async {
     if (!cloudSync.canPickStore) {
-      _snack('Chưa đăng nhập chủ/admin.');
+      _snack('Chưa đăng nhập chủ cửa hàng.');
       return;
     }
     final choice = await showCupertinoModalPopup<String>(
@@ -2150,7 +2150,7 @@ class _HomePageState extends State<HomePage>
   Future<void> _assignEmployeeToStore(Employee emp,
       {required bool move}) async {
     if (!cloudSync.canPickStore) {
-      _snack('Chưa đăng nhập chủ/admin.');
+      _snack('Chưa đăng nhập chủ cửa hàng.');
       return;
     }
     if (move && _s.data.employees.length <= 1) {

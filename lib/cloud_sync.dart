@@ -280,7 +280,7 @@ class CloudSync {
       if (pinFetchFailed) {
         throw StateError('Mất mạng, không kiểm tra được mã PIN.');
       }
-      throw StateError('Chưa có mã PIN nào. Nhờ admin đặt mã PIN trước.');
+      throw StateError('Chưa có mã PIN nào.');
     }
     final resolved =
         resolvePinRole(cfg.storePins, cfg.ownerPinHash, cfg.adminPinHash, pin);
@@ -490,7 +490,7 @@ class CloudSync {
   /// Trả về mã PIN vừa tạo (để chủ báo cho cửa hàng, chỉ hiện 1 lần).
   Future<String> createStore(String storeName, String pin) async {
     if (!available || !canPickStore) {
-      throw StateError('Chưa đăng nhập chủ/admin.');
+      throw StateError('Chưa đăng nhập chủ cửa hàng.');
     }
     final name = storeName.trim();
     if (name.isEmpty || name.contains('.') || name.contains('/')) {
@@ -539,7 +539,7 @@ class CloudSync {
   /// được tài khoản Auth) nhưng mất quyền vì không còn doc users.
   Future<void> deleteStore(String storeName) async {
     if (!available || !canPickStore) {
-      throw StateError('Chưa đăng nhập chủ/admin.');
+      throw StateError('Chưa đăng nhập chủ cửa hàng.');
     }
     await _db
         .collection('stores')
@@ -669,7 +669,7 @@ class CloudSync {
   /// thì thử lại bằng chính PIN mới cũng được.
   Future<void> setStorePin(String storeId, String newPin) async {
     if (!available || !canPickStore) {
-      throw StateError('Chưa đăng nhập chủ/admin.');
+      throw StateError('Chưa đăng nhập chủ cửa hàng.');
     }
     final email = accountEmail('store', storeId);
     final newPw = accountPassword('store', storeId, newPin);
@@ -928,7 +928,7 @@ class CloudSync {
   /// xem). Ném StateError nếu trùng tên hoặc không tải được dữ liệu.
   Future<void> addEmployeeToStore(String storeId, Employee emp) async {
     if (!available || !canPickStore) {
-      throw StateError('Chưa đăng nhập chủ/admin.');
+      throw StateError('Chưa đăng nhập chủ cửa hàng.');
     }
     final target = await fetchStoreData(storeId);
     if (target == null) {

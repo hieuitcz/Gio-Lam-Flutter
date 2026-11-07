@@ -431,7 +431,7 @@ class CloudSync {
             uid = cred.user!.uid;
           } catch (_) {
             throw StateError(
-                'Tài khoản $email đã tồn tại, nhờ admin kiểm tra.');
+                'Tài khoản $email đã tồn tại, không tạo mới được.');
           }
         }
         created = false;
@@ -585,9 +585,11 @@ class CloudSync {
   Future<void> setRolePin(String kind, String pin, {String? currentPin}) async {
     // Admin đặt được mọi mã PIN; chủ cửa hàng chỉ đổi được mã PIN
     // của chính mình (cần nhập mã PIN hiện tại).
-    if (!available ||
-        (cloudRole != 'admin' && !(cloudRole == 'owner' && kind == 'owner'))) {
-      throw StateError('Chỉ admin mới đặt mã PIN.');
+    if (!available) {
+      throw StateError('Chưa đăng nhập cloud, không đổi được mã PIN.');
+    }
+    if (cloudRole != 'admin' && !(cloudRole == 'owner' && kind == 'owner')) {
+      throw StateError('Không có quyền đổi mã PIN này.');
     }
     if (kind != 'owner' && kind != 'admin') {
       throw StateError('Vai trò không hợp lệ.');

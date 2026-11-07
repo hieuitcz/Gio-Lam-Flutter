@@ -706,6 +706,22 @@ class _HomePageState extends State<HomePage>
         }
         return;
       }
+      // Phiên đăng nhập chủ/admin KHÔNG được lưu lại: mỗi lần mở app
+      // phải nhập lại mã PIN. Để anh test cửa hàng, hoặc đăng nhập
+      // admin trên máy cửa hàng rồi đi thì không để lại quyền trên
+      // máy đó. Tài khoản cửa hàng thì vẫn giữ đăng nhập như cũ.
+      await cloudSync.loadUserProfile(_s.data.storeName);
+      if (cloudSync.cloudRole == 'admin' || cloudSync.cloudRole == 'owner') {
+        await cloudSync.signOut();
+        if (mounted) {
+          setState(() {
+            _showCloudLogin = true;
+            _role = 'employee';
+            _tab = 0;
+          });
+        }
+        return;
+      }
       await _afterCloudSignIn();
       return;
     }
@@ -1251,7 +1267,7 @@ class _HomePageState extends State<HomePage>
               Text(
                 setup
                     ? 'Chưa có mã PIN nào. Người mở app đầu tiên đặt mã PIN admin (4-6 chữ số) — mã này mở được tất cả các cửa hàng. Giữ kỹ mã PIN này.'
-                    : 'Nhập mã PIN của cửa hàng (do chủ cấp) để vào đúng cửa hàng đó. Mã PIN chủ thì xem được hết các cửa hàng. Mất mạng vẫn dùng được offline.',
+                    : 'Nhập mã PIN của cửa hàng (do chủ cấp) để vào đúng cửa hàng đó. Mã PIN chủ thì xem được hết các cửa hàng. Mã PIN chủ không được lưu lại, mở app lần sau phải nhập lại. Mất mạng vẫn dùng được offline.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: _muted, fontSize: 14),
               ),

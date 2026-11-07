@@ -82,7 +82,9 @@ bool canEmployeeAddShift(String dateStr, {DateTime? now}) {
 /// "Rybna-gio-lam.xlsx" -> "Rybna"; "gio-lam.xlsx" -> "".
 String storeNameFromFile(String fileName) {
   final stem = fileName.split('/').last.split('.').first;
-  if (stem.endsWith('-gio-lam')) return stem.substring(0, stem.length - '-gio-lam'.length);
+  if (stem.endsWith('-gio-lam')) {
+    return stem.substring(0, stem.length - '-gio-lam'.length);
+  }
   return stem == 'gio-lam' ? '' : stem;
 }
 
@@ -105,22 +107,96 @@ bool isToday(DateTime day, {DateTime? now}) {
 bool isValidPin(String pin) => RegExp(r'^\d{4,6}$').hasMatch(pin);
 
 /// SHA-256 hex của mã PIN (lưu trong pins/config, không lưu PIN gốc).
-String pinHash(String pin) =>
-    sha256.convert(utf8.encode(pin)).toString();
+String pinHash(String pin) => sha256.convert(utf8.encode(pin)).toString();
+
+/// Tìm lại mã PIN (4-6 chữ số) từ SHA-256 hash của nó: thử hết các
+/// mã 0000-999999, 4 số trước rồi 5, 6 số. PIN ngắn nên dò hết chỉ
+/// mất 1-2 giây — đúng như giới hạn đã nói ở trên (hash công khai,
+/// PIN chỉ ngăn người tò mò). Dùng để admin xem lại mã PIN chủ sau
+/// khi chủ tự đổi, không cần hỏi chủ và không lưu thêm mã PIN ở đâu.
+/// Trả về null nếu hash không khớp mã PIN 4-6 chữ số nào.
+String? recoverPinFromHash(String hash) {
+  for (var len = 4; len <= 6; len++) {
+    final max = len == 4
+        ? 10000
+        : len == 5
+            ? 100000
+            : 1000000;
+    for (var n = 0; n < max; n++) {
+      if (pinHash(n.toString().padLeft(len, '0')) == hash) {
+        return n.toString().padLeft(len, '0');
+      }
+    }
+  }
+  return null;
+}
 
 const _viDiacritics = {
-  'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ả': 'a', 'ạ': 'a',
-  'ă': 'a', 'ằ': 'a', 'ắ': 'a', 'ẳ': 'a', 'ẵ': 'a', 'ặ': 'a',
-  'ầ': 'a', 'ấ': 'a', 'ẩ': 'a', 'ẫ': 'a', 'ậ': 'a',
-  'è': 'e', 'é': 'e', 'ê': 'e', 'ẻ': 'e', 'ẹ': 'e',
-  'ề': 'e', 'ế': 'e', 'ể': 'e', 'ễ': 'e', 'ệ': 'e',
-  'ì': 'i', 'í': 'i', 'î': 'i', 'ỉ': 'i', 'ị': 'i',
-  'ò': 'o', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ỏ': 'o', 'ọ': 'o',
-  'ơ': 'o', 'ờ': 'o', 'ớ': 'o', 'ở': 'o', 'ỡ': 'o', 'ợ': 'o',
-  'ồ': 'o', 'ố': 'o', 'ổ': 'o', 'ỗ': 'o', 'ộ': 'o',
-  'ù': 'u', 'ú': 'u', 'û': 'u', 'ủ': 'u', 'ụ': 'u',
-  'ư': 'u', 'ừ': 'u', 'ứ': 'u', 'ử': 'u', 'ữ': 'u', 'ự': 'u',
-  'ỳ': 'y', 'ý': 'y', 'ỵ': 'y', 'ỷ': 'y', 'ỹ': 'y',
+  'à': 'a',
+  'á': 'a',
+  'â': 'a',
+  'ã': 'a',
+  'ả': 'a',
+  'ạ': 'a',
+  'ă': 'a',
+  'ằ': 'a',
+  'ắ': 'a',
+  'ẳ': 'a',
+  'ẵ': 'a',
+  'ặ': 'a',
+  'ầ': 'a',
+  'ấ': 'a',
+  'ẩ': 'a',
+  'ẫ': 'a',
+  'ậ': 'a',
+  'è': 'e',
+  'é': 'e',
+  'ê': 'e',
+  'ẻ': 'e',
+  'ẹ': 'e',
+  'ề': 'e',
+  'ế': 'e',
+  'ể': 'e',
+  'ễ': 'e',
+  'ệ': 'e',
+  'ì': 'i',
+  'í': 'i',
+  'î': 'i',
+  'ỉ': 'i',
+  'ị': 'i',
+  'ò': 'o',
+  'ó': 'o',
+  'ô': 'o',
+  'õ': 'o',
+  'ỏ': 'o',
+  'ọ': 'o',
+  'ơ': 'o',
+  'ờ': 'o',
+  'ớ': 'o',
+  'ở': 'o',
+  'ỡ': 'o',
+  'ợ': 'o',
+  'ồ': 'o',
+  'ố': 'o',
+  'ổ': 'o',
+  'ỗ': 'o',
+  'ộ': 'o',
+  'ù': 'u',
+  'ú': 'u',
+  'û': 'u',
+  'ủ': 'u',
+  'ụ': 'u',
+  'ư': 'u',
+  'ừ': 'u',
+  'ứ': 'u',
+  'ử': 'u',
+  'ữ': 'u',
+  'ự': 'u',
+  'ỳ': 'y',
+  'ý': 'y',
+  'ỵ': 'y',
+  'ỷ': 'y',
+  'ỹ': 'y',
   'đ': 'd',
 };
 
@@ -162,11 +238,8 @@ String accountPassword(String role, String storeId, String pin) {
 /// pins/config: trả về (role, storeId) — storeId '*' với chủ/admin —
 /// hoặc null nếu PIN không khớp cái nào. PIN chủ/admin được kiểm tra
 /// TRƯỚC nên nếu trùng hash thì quyền cao hơn thắng.
-({String role, String storeId})? resolvePinRole(
-    Map<String, String> storePins,
-    String? ownerPinHash,
-    String? adminPinHash,
-    String pin) {
+({String role, String storeId})? resolvePinRole(Map<String, String> storePins,
+    String? ownerPinHash, String? adminPinHash, String pin) {
   final h = pinHash(pin);
   if (adminPinHash != null && h == adminPinHash) {
     return (role: 'admin', storeId: '*');

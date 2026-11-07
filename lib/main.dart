@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
@@ -1237,6 +1238,39 @@ class _HomePageState extends State<HomePage>
       setState(() => _cloudBusy = false);
       _snack('Đổi mã PIN lỗi: $e');
     }
+  }
+
+  // Admin xem lại mã PIN chủ hiện tại (kể cả khi chủ vừa tự đổi):
+  // mã PIN chỉ 4-6 số nên tìm lại được từ hash đã lưu, chạy ở
+  // luồng riêng để không đơ giao diện, không cần hỏi chủ và không
+  // lưu thêm mã PIN ở đâu.
+  Future<void> _showOwnerPin() async {
+    final hash = cloudSync.pinConfig?.ownerPinHash;
+    if (hash == null) {
+      _snack('Chưa có mã PIN chủ.');
+      return;
+    }
+    setState(() => _cloudBusy = true);
+    final pin = await compute(recoverPinFromHash, hash);
+    if (!mounted) return;
+    setState(() => _cloudBusy = false);
+    if (pin == null) {
+      _snack('Không tìm được mã PIN chủ.');
+      return;
+    }
+    await showCupertinoDialog(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Mã PIN chủ'),
+        content: Text('Mã PIN là: $pin\nChỉ admin xem được mã này.'),
+        actions: [
+          CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Đã ghi nhớ')),
+        ],
+      ),
+    );
   }
 
   // Màn hình nhập mã PIN: hiện khi Firebase khởi tạo được mà chưa
@@ -3351,6 +3385,17 @@ class _HomePageState extends State<HomePage>
                   trailing:
                       const Icon(Icons.chevron_right, size: 16, color: _muted),
                   onTap: _cloudBusy ? null : () => _setRolePin('owner'),
+                ),
+                const Divider(height: 1, color: _line),
+                ListTile(
+                  leading:
+                      const IconTile(icon: Icons.visibility, tint: _accent),
+                  title: const Text('Xem mã PIN chủ'),
+                  subtitle: const Text(
+                      'Tìm lại mã PIN chủ hiện tại (chỉ admin xem được)'),
+                  trailing:
+                      const Icon(Icons.chevron_right, size: 16, color: _muted),
+                  onTap: _cloudBusy ? null : _showOwnerPin,
                 ),
                 const Divider(height: 1, color: _line),
                 ListTile(

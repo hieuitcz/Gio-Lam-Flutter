@@ -37,19 +37,23 @@ void main() {
     store.data = AppData.seed();
     // Ca dem: vao 20:00 hom qua
     final yesterday = DateTime.now().subtract(const Duration(days: 1));
-    store.clockIn('Hieu', when: DateTime(yesterday.year, yesterday.month, yesterday.day, 20, 0));
+    store.clockIn('Hieu',
+        when: DateTime(yesterday.year, yesterday.month, yesterday.day, 20, 0));
     // Chua tan ca cu thi khong vao ca moi duoc
     expect(() => store.clockIn('Hieu'), throwsStateError);
     // Tan ca 05:00 sang hom nay
     final now = DateTime.now();
-    final sh = store.clockOut('Hieu', when: DateTime(now.year, now.month, now.day, 5, 0));
+    final sh = store.clockOut('Hieu',
+        when: DateTime(now.year, now.month, now.day, 5, 0));
     expect(sh.total, 540);
     // Nhap tay ngay cu bi chan
-    expect(() => store.manualIn('Hoan', '9:00', now: DateTime(2026, 11, 1)), throwsStateError);
+    expect(() => store.manualIn('Hoan', '9:00', now: DateTime(2026, 11, 1)),
+        throwsStateError);
   });
 
   test('trang thai nghi khong tinh gio, nghi giua ca tru gio', () {
-    final s = Shift('2026-11-05', clockIn: 9 * 60, clockOut: 20 * 60, breakMinutes: 60);
+    final s = Shift('2026-11-05',
+        clockIn: 9 * 60, clockOut: 20 * 60, breakMinutes: 60);
     expect(s.total, 600); // 11h - 1h nghi = 10h00
     final leave = Shift('2026-11-06', status: 'paidLeave');
     expect(leave.total, 0);
@@ -66,8 +70,12 @@ void main() {
     data.standardMinutesPerDay = 720;
     data.employees.first.annualLeaveAllowance = 12;
     data.shifts['Hieu'] = [
-      Shift('2026-11-05', clockIn: 540, clockOut: 1200,
-          status: 'work', breakMinutes: 30, note: 'tăng ca')
+      Shift('2026-11-05',
+          clockIn: 540,
+          clockOut: 1200,
+          status: 'work',
+          breakMinutes: 30,
+          note: 'tăng ca')
     ];
     final restored = AppData.fromJson(
         jsonDecode(jsonEncode(data.toJson())) as Map<String, dynamic>);
@@ -116,7 +124,8 @@ void main() {
     expect(store.data.shiftsOn('Hieu', '2026-11-05').length, 2);
   });
 
-  test('file du lieu duoc ky: sua ngoai thi phat hien va khoi phuc tu sao luu', () async {
+  test('file du lieu duoc ky: sua ngoai thi phat hien va khoi phuc tu sao luu',
+      () async {
     final f = File('/tmp/test-gio-lam-sign.json');
     for (final suffix in ['', '.key', '.bak']) {
       final x = File('/tmp/test-gio-lam-sign.json$suffix');
@@ -228,8 +237,8 @@ void main() {
   test('ca qua dem nhan vien sua duoc vao sang hom ket thuc', () {
     final now = DateTime(2026, 11, 6, 8, 0); // sang 6/11
     // Ca 20:00 ngay 5/11 -> 05:00 ngay 6/11: sua duoc sang 6/11.
-    expect(canEmployeeEditShift('2026-11-05', 20 * 60, 5 * 60, now: now),
-        isTrue);
+    expect(
+        canEmployeeEditShift('2026-11-05', 20 * 60, 5 * 60, now: now), isTrue);
     expect(shiftEndDateStr('2026-11-05', 20 * 60, 5 * 60), '2026-11-06');
     // Sang 7/11 thi het han: chi chu moi sua duoc.
     expect(
@@ -238,12 +247,10 @@ void main() {
         isFalse);
     // Ca thuong ngay hom qua: khong sua duoc.
     expect(
-        canEmployeeEditShift('2026-11-05', 9 * 60, 17 * 60, now: now),
-        isFalse);
+        canEmployeeEditShift('2026-11-05', 9 * 60, 17 * 60, now: now), isFalse);
     // Ca hom nay: sua duoc.
     expect(
-        canEmployeeEditShift('2026-11-06', 9 * 60, 17 * 60, now: now),
-        isTrue);
+        canEmployeeEditShift('2026-11-06', 9 * 60, 17 * 60, now: now), isTrue);
   });
 
   test('dong bo cloud: moc cloudUpdatedAt luu/khoi phuc dung', () {
@@ -279,6 +286,12 @@ void main() {
     expect(pinHash('1234'), isNot('1234'));
   });
 
+  test('ma PIN: tim lai PIN tu hash (admin xem PIN chu)', () {
+    expect(recoverPinFromHash(pinHash('1234')), '1234');
+    expect(recoverPinFromHash(pinHash('54321')), '54321');
+    expect(recoverPinFromHash(pinHash('abcdef')), isNull);
+  });
+
   test('ma PIN: slug bo dau tieng Viet', () {
     expect(storeSlug('Rybna'), 'rybna');
     expect(storeSlug('Cửa Hàng A'), 'cuahanga');
@@ -288,8 +301,7 @@ void main() {
 
   test('ma PIN: email + mat khau suy ra theo vai tro', () {
     expect(accountEmail('store', 'Rybna'), 'store-rybna@gio-lam.local');
-    expect(accountEmail('store', 'Cửa Hàng A'),
-        'store-cuahanga@gio-lam.local');
+    expect(accountEmail('store', 'Cửa Hàng A'), 'store-cuahanga@gio-lam.local');
     expect(accountEmail('owner', '*'), 'owner@gio-lam.local');
     expect(accountEmail('admin', '*'), 'admin@gio-lam.local');
     // Mat khau luon >= 6 ky tu (yeu cau cua Firebase Auth).
@@ -298,14 +310,17 @@ void main() {
     expect(accountPassword('owner', '*', '1234'), 'gio-lam-owner-1234');
     expect(accountPassword('admin', '*', '1234'), 'gio-lam-admin-1234');
     // Khac cua hang / khac PIN thi mat khau khac nhau.
-    expect(accountPassword('store', 'Rybna', '1234') ==
-        accountPassword('store', 'Hoan', '1234'), isFalse);
-    expect(accountPassword('store', 'Rybna', '1234') ==
-        accountPassword('store', 'Rybna', '4321'), isFalse);
+    expect(
+        accountPassword('store', 'Rybna', '1234') ==
+            accountPassword('store', 'Hoan', '1234'),
+        isFalse);
+    expect(
+        accountPassword('store', 'Rybna', '1234') ==
+            accountPassword('store', 'Rybna', '4321'),
+        isFalse);
   });
 
-  test('ma PIN: map PIN -> vai tro (admin truoc, chu sau, roi cua hang)',
-      () {
+  test('ma PIN: map PIN -> vai tro (admin truoc, chu sau, roi cua hang)', () {
     final stores = {
       'Rybna': pinHash('1111'),
       'Hoan': pinHash('2222'),
@@ -316,16 +331,13 @@ void main() {
         (role: 'store', storeId: 'Rybna'));
     expect(resolvePinRole(stores, owner, admin, '2222'),
         (role: 'store', storeId: 'Hoan'));
-    expect(
-        resolvePinRole(stores, owner, admin, '3333'),
+    expect(resolvePinRole(stores, owner, admin, '3333'),
         (role: 'owner', storeId: '*'));
-    expect(
-        resolvePinRole(stores, owner, admin, '4444'),
+    expect(resolvePinRole(stores, owner, admin, '4444'),
         (role: 'admin', storeId: '*'));
     expect(resolvePinRole(stores, owner, admin, '9999'), isNull);
     // PIN trung hash giua cua hang va admin thi quyen cao hon thang.
     expect(resolvePinRole({'Rybna': pinHash('4444')}, owner, admin, '4444'),
         (role: 'admin', storeId: '*'));
   });
-
 }
